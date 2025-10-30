@@ -41,9 +41,10 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
       return await apiRequest("POST", "/api/trade", data);
     },
     onSuccess: (data) => {
+      const receiptId = data?.receiptId || data?.transaction?.id || 'N/A';
       toast({
         title: "Trade Successful",
-        description: `Transaction completed. Receipt #${data.receiptId.slice(0, 8)}`,
+        description: `Transaction completed. Receipt #${receiptId.toString().slice(0, 8)}`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/words/top"] });
       queryClient.invalidateQueries({ queryKey: ["/api/words/trending"] });
