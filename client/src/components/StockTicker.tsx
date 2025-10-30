@@ -18,9 +18,9 @@ export function StockTicker() {
 
   if (isLoading || !words || words.length === 0) {
     return (
-      <div className="h-12 border-b bg-muted/30 flex items-center px-4">
-        <div className="text-sm text-muted-foreground font-mono">
-          Loading market data...
+      <div className="h-12 border-b bg-muted/30 flex items-center justify-center px-4">
+        <div className="text-sm text-muted-foreground">
+          {isLoading ? "Loading market data..." : "Market opening soon — be the first to submit a word"}
         </div>
       </div>
     );

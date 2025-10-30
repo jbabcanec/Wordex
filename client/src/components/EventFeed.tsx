@@ -63,9 +63,14 @@ export function EventFeed() {
           <CardTitle className="font-display">Event Feed</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            <Clock className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">No recent events</p>
+          <div className="text-center py-12 px-6">
+            <div className="p-4 rounded-full bg-muted/30 w-fit mx-auto mb-4">
+              <Globe className="h-10 w-10 text-muted-foreground" />
+            </div>
+            <h3 className="font-semibold mb-2">Track Cultural Impact</h3>
+            <p className="text-sm text-muted-foreground">
+              When words make headlines, their value changes. Events will appear here as they're validated.
+            </p>
           </div>
         </CardContent>
       </Card>

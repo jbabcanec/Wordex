@@ -40,12 +40,17 @@ export function Leaderboard() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="font-display">Leaderboard</CardTitle>
+          <CardTitle className="font-display">Top Traders</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            <Trophy className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">No traders yet</p>
+          <div className="text-center py-12 px-6">
+            <div className="p-4 rounded-full bg-muted/30 w-fit mx-auto mb-4">
+              <Trophy className="h-10 w-10 text-muted-foreground" />
+            </div>
+            <h3 className="font-semibold mb-2">Race to the Top</h3>
+            <p className="text-sm text-muted-foreground">
+              Build your earnings through smart trading and climb the ranks.
+            </p>
           </div>
         </CardContent>
       </Card>

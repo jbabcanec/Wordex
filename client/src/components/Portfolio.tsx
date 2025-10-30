@@ -47,10 +47,14 @@ export function Portfolio() {
           <CardTitle className="font-display">Your Portfolio</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            <Wallet className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">No holdings yet</p>
-            <p className="text-xs mt-1">Start by submitting or buying shares in words</p>
+          <div className="text-center py-12 px-6">
+            <div className="p-4 rounded-full bg-muted/30 w-fit mx-auto mb-4">
+              <Wallet className="h-10 w-10 text-muted-foreground" />
+            </div>
+            <h3 className="font-semibold mb-2">Build Your Position</h3>
+            <p className="text-sm text-muted-foreground">
+              Your portfolio will track all your word holdings, cost basis, and profits.
+            </p>
           </div>
         </CardContent>
       </Card>

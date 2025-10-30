@@ -111,43 +111,76 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Top Words & Actions */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Quick Actions */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Card className="hover-elevate cursor-pointer border-2" onClick={() => setSubmitWordModalOpen(true)}>
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <h3 className="font-display font-semibold text-lg">Submit a Word</h3>
-                      <p className="text-sm text-muted-foreground">
-                        List a new word for 10 WB and receive 50 shares
-                      </p>
-                    </div>
-                    <div className="p-3 rounded-md bg-primary/10">
-                      <Plus className="h-6 w-6 text-primary" />
-                    </div>
+            {/* Hero Banner - Only show when no words exist */}
+            {!topWordsLoading && (!topWords || topWords.length === 0) && (
+              <Card className="border-2 border-primary/30 bg-gradient-to-br from-primary/5 via-background to-background overflow-hidden relative">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -mr-32 -mt-32" />
+                <CardContent className="p-8 relative">
+                  <div className="max-w-2xl">
+                    <h2 className="text-3xl font-display font-bold mb-3">
+                      Trade the Power of Language
+                    </h2>
+                    <p className="text-lg text-muted-foreground mb-6">
+                      Short the patriarchy. Long your vocabulary. Trade the zeitgeist.
+                    </p>
+                    <p className="text-foreground/80 mb-8">
+                      Be the first to list a word and claim your creator shares. 
+                      Every word starts with an intrinsic value of 1.00 WB and can grow 
+                      based on cultural events and social impact.
+                    </p>
+                    <Button
+                      size="lg"
+                      onClick={() => setSubmitWordModalOpen(true)}
+                      className="font-semibold"
+                      data-testid="button-submit-first-word"
+                    >
+                      <Plus className="h-5 w-5 mr-2" />
+                      Submit Your First Word
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
+            )}
 
-              <Card className="border-2">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <h3 className="font-display font-semibold text-lg">Your Stats</h3>
+            {/* Quick Actions - Only show when words exist */}
+            {!topWordsLoading && topWords && topWords.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Card className="hover-elevate cursor-pointer border-2" onClick={() => setSubmitWordModalOpen(true)}>
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between">
                       <div className="space-y-1">
-                        <div className="text-sm">
-                          <span className="text-muted-foreground">Total Earned:</span>{" "}
-                          <span className="font-mono font-semibold">{formatWB(user.totalEarnings)} WB</span>
-                        </div>
+                        <h3 className="font-display font-semibold text-lg">Submit a Word</h3>
+                        <p className="text-sm text-muted-foreground">
+                          List a new word for 10 WB and receive 50 shares
+                        </p>
+                      </div>
+                      <div className="p-3 rounded-md bg-primary/10">
+                        <Plus className="h-6 w-6 text-primary" />
                       </div>
                     </div>
-                    <div className="p-3 rounded-md bg-muted/50">
-                      <BarChart3 className="h-6 w-6 text-muted-foreground" />
+                  </CardContent>
+                </Card>
+
+                <Card className="border-2">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <h3 className="font-display font-semibold text-lg">Your Stats</h3>
+                        <div className="space-y-1">
+                          <div className="text-sm">
+                            <span className="text-muted-foreground">Total Earned:</span>{" "}
+                            <span className="font-mono font-semibold">{formatWB(user.totalEarnings)} WB</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-3 rounded-md bg-muted/50">
+                        <BarChart3 className="h-6 w-6 text-muted-foreground" />
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             {/* Top Power Words */}
             <Card>
@@ -162,10 +195,26 @@ export default function Dashboard() {
                     ))}
                   </div>
                 ) : !topWords || topWords.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p className="text-sm">No words listed yet</p>
-                    <p className="text-xs mt-1">Be the first to submit a word!</p>
+                  <div className="text-center py-16 px-6">
+                    <div className="max-w-md mx-auto">
+                      <div className="p-4 rounded-full bg-primary/10 w-fit mx-auto mb-4">
+                        <TrendingUp className="h-10 w-10 text-primary" />
+                      </div>
+                      <h3 className="text-xl font-display font-semibold mb-2">
+                        The Market Awaits
+                      </h3>
+                      <p className="text-muted-foreground mb-6">
+                        Submit the first word and become a pioneer trader. 
+                        Your word will be the foundation of the WORDEX marketplace.
+                      </p>
+                      <Button
+                        onClick={() => setSubmitWordModalOpen(true)}
+                        data-testid="button-submit-word-empty"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        List Your Word
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3">
