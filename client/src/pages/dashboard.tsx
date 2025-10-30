@@ -55,50 +55,61 @@ export default function Dashboard() {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between max-w-screen-2xl mx-auto px-6">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <TrendingUp className="h-6 w-6 text-primary" />
+        <div className="container max-w-screen-2xl mx-auto px-3 sm:px-6">
+          <div className="flex h-16 items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
               <div>
-                <h1 className="text-xl font-display font-bold tracking-tight">WORDEX</h1>
-                <p className="text-xs text-muted-foreground">by Floj</p>
+                <h1 className="text-base sm:text-xl font-display font-bold tracking-tight">WORDEX</h1>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">by Floj</p>
               </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-4">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setTourOpen(true)}
-              data-testid="button-help"
-            >
-              <HelpCircle className="h-4 w-4 mr-2" />
-              Help
-            </Button>
+            <div className="flex items-center gap-1 sm:gap-4">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setTourOpen(true)}
+                data-testid="button-help"
+                className="hidden sm:flex"
+              >
+                <HelpCircle className="h-4 w-4 mr-2" />
+                Help
+              </Button>
+              
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setTourOpen(true)}
+                data-testid="button-help-mobile"
+                className="sm:hidden"
+              >
+                <HelpCircle className="h-4 w-4" />
+              </Button>
 
-            <Card className="border-2 border-primary/20 bg-primary/5">
-              <CardContent className="p-3 flex items-center gap-3">
-                <Wallet className="h-5 w-5 text-primary" />
-                <div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide">
-                    Balance
+              <Card className="border-2 border-primary/20 bg-primary/5">
+                <CardContent className="p-2 sm:p-3 flex items-center gap-2 sm:gap-3">
+                  <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+                  <div>
+                    <div className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide">
+                      Balance
+                    </div>
+                    <div className="font-mono font-bold text-sm sm:text-lg" data-testid="text-balance">
+                      {formatWB(userBalance)} WB
+                    </div>
                   </div>
-                  <div className="font-mono font-bold text-lg" data-testid="text-balance">
-                    {formatWB(userBalance)} WB
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => window.location.href = "/api/logout"}
-              data-testid="button-logout"
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
+              <Button
+                size="icon"
+                variant="outline"
+                onClick={() => window.location.href = "/api/logout"}
+                data-testid="button-logout"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -107,23 +118,23 @@ export default function Dashboard() {
       <StockTicker />
 
       {/* Main Content */}
-      <main className="flex-1 container max-w-screen-2xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <main className="flex-1 container max-w-screen-2xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Left Column - Top Words & Actions */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             {/* Hero Banner - Only show when no words exist */}
             {!topWordsLoading && (!topWords || topWords.length === 0) && (
               <Card className="border-2 border-primary/30 bg-gradient-to-br from-primary/5 via-background to-background overflow-hidden relative">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -mr-32 -mt-32" />
-                <CardContent className="p-8 relative">
+                <CardContent className="p-4 sm:p-8 relative">
                   <div className="max-w-2xl">
-                    <h2 className="text-3xl font-display font-bold mb-3">
+                    <h2 className="text-xl sm:text-3xl font-display font-bold mb-2 sm:mb-3">
                       Trade the Power of Language
                     </h2>
-                    <p className="text-lg text-muted-foreground mb-6">
+                    <p className="text-base sm:text-lg text-muted-foreground mb-4 sm:mb-6">
                       Short the patriarchy. Long your vocabulary. Trade the zeitgeist.
                     </p>
-                    <p className="text-foreground/80 mb-8">
+                    <p className="text-sm sm:text-base text-foreground/80 mb-6 sm:mb-8">
                       Be the first to list a word and claim your creator shares. 
                       Every word starts with an intrinsic value of 1.00 WB and can grow 
                       based on cultural events and social impact.
@@ -131,7 +142,7 @@ export default function Dashboard() {
                     <Button
                       size="lg"
                       onClick={() => setSubmitWordModalOpen(true)}
-                      className="font-semibold"
+                      className="font-semibold w-full sm:w-auto"
                       data-testid="button-submit-first-word"
                     >
                       <Plus className="h-5 w-5 mr-2" />

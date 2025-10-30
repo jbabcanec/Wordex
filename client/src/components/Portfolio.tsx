@@ -71,42 +71,42 @@ export function Portfolio() {
       <CardHeader>
         <CardTitle className="font-display">Your Portfolio</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4 sm:space-y-6">
         {/* Summary */}
-        <div className="grid grid-cols-3 gap-4 p-4 rounded-md bg-muted/30">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 p-3 sm:p-4 rounded-md bg-muted/30">
           <div>
-            <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+            <div className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide mb-1">
               Total Value
             </div>
-            <div className="font-mono font-bold text-lg">
+            <div className="font-mono font-bold text-base sm:text-lg">
               {formatWB(totalValue)} WB
             </div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+            <div className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide mb-1">
               Cost Basis
             </div>
-            <div className="font-mono font-bold text-lg">
+            <div className="font-mono font-bold text-base sm:text-lg">
               {formatWB(totalCost)} WB
             </div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+            <div className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide mb-1">
               Profit/Loss
             </div>
             <div
               className={cn(
-                "font-mono font-bold text-lg flex items-center gap-1",
+                "font-mono font-bold text-base sm:text-lg flex items-center gap-1 flex-wrap",
                 totalProfitLoss >= 0 ? "text-gain" : "text-loss"
               )}
             >
               {totalProfitLoss >= 0 ? (
-                <TrendingUp className="h-4 w-4" />
+                <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4" />
               ) : (
-                <TrendingDown className="h-4 w-4" />
+                <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4" />
               )}
-              {formatWB(Math.abs(totalProfitLoss))} WB
-              <span className="text-sm">
+              <span className="truncate">{formatWB(Math.abs(totalProfitLoss))} WB</span>
+              <span className="text-xs sm:text-sm">
                 ({formatPercentage(totalProfitLossPercent)})
               </span>
             </div>
@@ -118,15 +118,15 @@ export function Portfolio() {
           {holdings.map((holding) => (
             <div
               key={holding.word.id}
-              className="flex items-center justify-between p-3 rounded-md border bg-card hover-elevate"
+              className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-md border bg-card hover-elevate gap-2"
               data-testid={`holding-${holding.word.textNormalized}`}
             >
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold tracking-wider">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono font-bold tracking-wider text-sm sm:text-base truncate">
                     {holding.word.textNormalized}
                   </span>
-                  <span className="text-sm text-muted-foreground">
+                  <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
                     {holding.quantity.toLocaleString()} shares
                   </span>
                 </div>
@@ -135,7 +135,7 @@ export function Portfolio() {
                 </div>
               </div>
 
-              <div className="text-right">
+              <div className="text-right sm:text-left flex sm:flex-col justify-between sm:justify-start">
                 <div className="font-mono font-semibold">
                   {formatWB(holding.currentValue)} WB
                 </div>

@@ -31,23 +31,46 @@ export function WordCard({ word, userBalance, userShares, compact = false }: Wor
     return (
       <>
         <div
-          className="flex items-center justify-between p-3 rounded-md border bg-card hover-elevate cursor-pointer"
+          className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-md border bg-card hover-elevate cursor-pointer gap-3"
           onClick={() => setTradeModalOpen(true)}
           data-testid={`word-card-${word.textNormalized}`}
         >
-          <div className="flex items-center gap-3 flex-1">
-            <div className="flex flex-col">
-              <span className="font-mono font-bold text-sm tracking-wider">
+          <div className="flex items-center justify-between sm:justify-start gap-3 flex-1">
+            <div className="flex flex-col flex-1 min-w-0">
+              <span className="font-mono font-bold text-sm sm:text-base tracking-wider truncate">
                 {word.textNormalized}
               </span>
               <span className="text-xs text-muted-foreground">
                 {word.sharesOutstanding.toLocaleString()} / {word.totalShares.toLocaleString()} shares
               </span>
             </div>
+            
+            <div className="text-right sm:hidden">
+              <div className="font-mono font-semibold text-sm">
+                {formatWB(word.intrinsicValue)} WB
+              </div>
+              {word.change24h !== undefined && (
+                <div
+                  className={cn(
+                    "flex items-center gap-1 text-xs font-mono justify-end",
+                    isPositive ? "text-gain" : isNegative ? "text-loss" : "text-muted-foreground"
+                  )}
+                >
+                  {isPositive ? (
+                    <TrendingUp className="h-3 w-3" />
+                  ) : isNegative ? (
+                    <TrendingDown className="h-3 w-3" />
+                  ) : (
+                    <Minus className="h-3 w-3" />
+                  )}
+                  {formatPercentage(change)}
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-right">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="text-right hidden sm:block">
               <div className="font-mono font-semibold">
                 {formatWB(word.intrinsicValue)} WB
               </div>
@@ -70,7 +93,12 @@ export function WordCard({ word, userBalance, userShares, compact = false }: Wor
               )}
             </div>
 
-            <Button size="sm" onClick={(e) => { e.stopPropagation(); setTradeModalOpen(true); }} data-testid={`button-trade-${word.textNormalized}`}>
+            <Button 
+              size="sm" 
+              onClick={(e) => { e.stopPropagation(); setTradeModalOpen(true); }} 
+              data-testid={`button-trade-${word.textNormalized}`}
+              className="w-full sm:w-auto"
+            >
               Trade
             </Button>
           </div>
