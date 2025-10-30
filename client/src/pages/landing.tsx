@@ -176,8 +176,8 @@ export default function Landing() {
 
             {/* Description */}
             <p className="max-w-2xl text-sm sm:text-base md:text-lg text-muted-foreground px-4">
-              A speculative trading platform where you trade shares in words based on their social and cultural power.
-              Submit words, trade shares, validate events, and earn dividends when your words gain momentum.
+              A speculative trading platform where you trade shares in individual words based on their social and cultural power.
+              No phrases, just words. Submit words, trade shares, validate events, and earn dividends when your words gain momentum.
             </p>
 
             {/* CTA */}
@@ -202,7 +202,7 @@ export default function Landing() {
                   </div>
                   <h3 className="font-display font-semibold text-base sm:text-lg">Submit Words</h3>
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    Submit any word for 10 WB and receive 50 shares as the creator.
+                    Submit any single word for 10 WB and receive 50 shares as the creator.
                     Watch its value grow with cultural events.
                   </p>
                 </div>
