@@ -103,7 +103,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (err) {
           return res.status(500).json({ message: "Signup successful but login failed" });
         }
-        res.json({ message: "Signup successful", user: newUser });
+        // Return only safe, non-sensitive user data
+        res.json({ 
+          message: "Signup successful", 
+          user: {
+            id: newUser.id,
+            username: newUser.username,
+            email: newUser.email,
+            firstName: newUser.firstName,
+            lastName: newUser.lastName,
+          }
+        });
       });
     } catch (error: any) {
       console.error("Signup error:", error);
