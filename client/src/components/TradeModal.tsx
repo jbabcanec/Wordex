@@ -40,7 +40,7 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
     mutationFn: async (data: { wordId: string; quantity: number; action: "buy" | "sell" }) => {
       return await apiRequest("POST", "/api/trade", data);
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       const receiptId = data?.receiptId || data?.transaction?.id || 'N/A';
       toast({
         title: "Trade Successful",
@@ -99,12 +99,12 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-display text-2xl font-bold tracking-wide">
+          <DialogTitle className="font-display text-xl sm:text-2xl font-bold tracking-wide">
             {word.textNormalized}
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-sm">
             Intrinsic Value: {formatWB(intrinsicValue)} WB
           </DialogDescription>
         </DialogHeader>
@@ -115,9 +115,9 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
             <TabsTrigger value="sell" data-testid="tab-sell">Sell</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="buy" className="space-y-4 mt-6">
-            <div className="space-y-3">
-              <Label htmlFor="buy-quantity">Quantity (shares)</Label>
+          <TabsContent value="buy" className="space-y-3 sm:space-y-4 mt-4 sm:mt-6">
+            <div className="space-y-2 sm:space-y-3">
+              <Label htmlFor="buy-quantity" className="text-sm">Quantity (shares)</Label>
               <Input
                 id="buy-quantity"
                 type="number"
@@ -126,7 +126,7 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 placeholder="0"
-                className="font-mono text-lg"
+                className="font-mono text-base sm:text-lg"
                 data-testid="input-quantity"
               />
               <div className="text-xs text-muted-foreground">
@@ -134,12 +134,12 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
               </div>
             </div>
 
-            <div className="rounded-md bg-muted/30 p-4 space-y-2">
-              <div className="flex justify-between text-sm">
+            <div className="rounded-md bg-muted/30 p-3 sm:p-4 space-y-2">
+              <div className="flex justify-between text-xs sm:text-sm">
                 <span className="text-muted-foreground">Price per share</span>
                 <span className="font-mono">{formatWB(pricePerShare)} WB</span>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-xs sm:text-sm">
                 <span className="text-muted-foreground">Subtotal</span>
                 <span className="font-mono">{formatWB(subtotal)} WB</span>
               </div>

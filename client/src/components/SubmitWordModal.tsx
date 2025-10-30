@@ -81,16 +81,16 @@ export function SubmitWordModal({ open, onOpenChange }: SubmitWordModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-display text-2xl">Submit a Word</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="font-display text-xl sm:text-2xl">Submit a Word</DialogTitle>
+          <DialogDescription className="text-sm">
             Submit any word to the marketplace. Cost: {costInWB} WB
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+          <div className="space-y-2 sm:space-y-3">
             <Label htmlFor="word" className="text-sm font-medium">
               Word or Phrase
             </Label>
@@ -99,7 +99,7 @@ export function SubmitWordModal({ open, onOpenChange }: SubmitWordModalProps) {
               value={wordInput}
               onChange={(e) => setWordInput(e.target.value)}
               placeholder="Enter any word..."
-              className="text-lg font-mono uppercase"
+              className="text-base sm:text-lg font-mono uppercase"
               maxLength={100}
               autoFocus
               data-testid="input-submit-word"
