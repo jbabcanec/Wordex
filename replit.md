@@ -54,8 +54,8 @@ Preferred communication style: Simple, everyday language.
 **Key Business Logic**:
 - **Word Normalization**: All words stored in uppercase without spaces for consistent matching
 - **Trading Mechanics**: 2% platform spread (buy at price × 1.02, sell at price × 0.98), 0.5% transaction fee
-- **Supply/Demand Pricing**: Bonding curve algorithm where price increases with shares sold. Each word starts at 1.00 WB base price with 1,000 total shares. Price formula: `basePrice × (1 + 0.5 × sharesOutstanding / totalShares)`
-- **Word Submission**: Costs 10 WB to submit a word, submitter automatically receives 50 shares (5% of total supply)
+- **Supply/Demand Pricing**: Bonding curve algorithm where price increases with shares sold. Each word starts at 1.00 WB base price with 100,000 total shares. Price formula: `basePrice × (1 + 0.5 × sharesOutstanding / totalShares)`
+- **Word Submission**: Costs 10 WB to submit a word, submitter automatically receives 5,000 shares (5% of total supply)
 - **WordBucks Economy**: Virtual currency system with initial 10,000 WB signup bonus
 - **Ticker Percentage Change**: Day-over-day price change calculated by comparing current price to most recent transaction from before today (midnight). Shows 0% for words without yesterday's trading data.
 

@@ -17,8 +17,8 @@ function normalizeWord(text: string): string {
 // Supply/Demand Pricing: Linear bonding curve
 // Price increases as more shares are sold from the pool
 // Formula: basePrice * (1 + 0.5 * sharesOutstanding / totalShares)
-// Price ranges from $1.025 (at 50 shares) to $1.50 (at 1000 shares)
-function calculateCurrentPrice(sharesOutstanding: number, totalShares: number = 1000): number {
+// Price ranges from $1.025 (at 5000 shares) to $1.50 (at 100000 shares)
+function calculateCurrentPrice(sharesOutstanding: number, totalShares: number = 100000): number {
   const basePrice = 1.00;
   const k = 0.5; // Linear price multiplier
   const ratio = sharesOutstanding / totalShares;
@@ -27,7 +27,7 @@ function calculateCurrentPrice(sharesOutstanding: number, totalShares: number = 
 }
 
 // Calculate price after a buy/sell transaction
-function calculateNewPrice(currentShares: number, shareDelta: number, totalShares: number = 1000): number {
+function calculateNewPrice(currentShares: number, shareDelta: number, totalShares: number = 100000): number {
   const newShares = currentShares + shareDelta;
   return calculateCurrentPrice(newShares, totalShares);
 }
@@ -273,8 +273,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
           .returning();
         
-        // Grant creator 50 shares
-        const creatorShares = 50;
+        // Grant creator 5000 shares (5% of total supply)
+        const creatorShares = 5000;
         const costBasis = '0.00';
         await tx
           .insert(shareHoldings)

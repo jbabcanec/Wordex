@@ -51,8 +51,8 @@ export const words = pgTable("words", {
   displayText: varchar("display_text", { length: 100 }).notNull(), // Original submission (for display)
   submitterId: varchar("submitter_id").notNull().references(() => users.id),
   currentPrice: decimal("current_price", { precision: 10, scale: 2 }).notNull().default('1.00'),
-  totalShares: integer("total_shares").notNull().default(1000),
-  sharesOutstanding: integer("shares_outstanding").notNull().default(50), // Starts with submitter's 50 shares
+  totalShares: integer("total_shares").notNull().default(100000),
+  sharesOutstanding: integer("shares_outstanding").notNull().default(5000), // Starts with submitter's 5000 shares (5%)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
