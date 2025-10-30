@@ -130,27 +130,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Word must be 1-100 characters after normalization" });
       }
       
-      // Check for duplicates
-      const existing = await storage.getWordByNormalizedText(normalized);
-      if (existing) {
-        return res.status(400).json({ message: "This word already exists" });
-      }
-      
-      // Get user balance
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      
-      const balance = parseFloat(user.wbBalance);
       const submissionFee = 10;
       
-      if (balance < submissionFee) {
-        return res.status(400).json({ message: "Insufficient balance. Need 10 WB to submit a word." });
-      }
-      
-      // Use atomic transaction for word submission
+      // Use atomic transaction for word submission with validation inside
       const result = await db.transaction(async (tx) => {
+        // Check for duplicates inside transaction
+        const [existing] = await tx
+          .select()
+          .from(words)
+          .where(eq(words.textNormalized, normalized))
+          .limit(1);
+        
+        if (existing) {
+          throw new Error("This word already exists");
+        }
+        
+        // Get and validate user balance inside transaction (with row lock)
+        const [user] = await tx
+          .select()
+          .from(users)
+          .where(eq(users.id, userId))
+          .for('update');
+        
+        if (!user) {
+          throw new Error("User not found");
+        }
+        
+        const balance = parseFloat(user.wbBalance);
+        if (balance < submissionFee) {
+          throw new Error("Insufficient balance. Need 10 WB to submit a word.");
+        }
         const newBalance = (balance - submissionFee).toFixed(2);
         
         // Update user balance
@@ -235,40 +244,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid quantity" });
       }
       
-      // Get word
-      const word = await storage.getWord(wordId);
-      if (!word) {
-        return res.status(404).json({ message: "Word not found" });
-      }
-      
-      // Get user
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      
-      const userBalance = parseFloat(user.wbBalance);
-      const intrinsicValue = parseFloat(word.intrinsicValue);
       const isBuy = action === 'buy';
-      const pricePerShare = calculateTradePrice(intrinsicValue, isBuy);
-      const subtotal = pricePerShare * quantityNum;
-      const fee = calculateFee(subtotal);
-      const total = subtotal + fee;
       
       if (isBuy) {
-        // BUY logic - validation before transaction
-        const availableShares = word.totalShares - word.sharesOutstanding;
-        
-        if (quantityNum > availableShares) {
-          return res.status(400).json({ message: `Only ${availableShares} shares available from platform` });
-        }
-        
-        if (total > userBalance) {
-          return res.status(400).json({ message: "Insufficient balance" });
-        }
-        
-        // Use atomic transaction for BUY
+        // BUY logic - all validation inside transaction
         const result = await db.transaction(async (tx) => {
+          // Lock and get word data
+          const [word] = await tx
+            .select()
+            .from(words)
+            .where(eq(words.id, wordId))
+            .for('update');
+          
+          if (!word) {
+            throw new Error("Word not found");
+          }
+          
+          // Lock and get user data
+          const [user] = await tx
+            .select()
+            .from(users)
+            .where(eq(users.id, userId))
+            .for('update');
+          
+          if (!user) {
+            throw new Error("User not found");
+          }
+          
+          // Calculate prices with locked data
+          const userBalance = parseFloat(user.wbBalance);
+          const intrinsicValue = parseFloat(word.intrinsicValue);
+          const pricePerShare = calculateTradePrice(intrinsicValue, true);
+          const subtotal = pricePerShare * quantityNum;
+          const fee = calculateFee(subtotal);
+          const total = subtotal + fee;
+          
+          // Validate inside transaction
+          const availableShares = word.totalShares - word.sharesOutstanding;
+          if (quantityNum > availableShares) {
+            throw new Error(`Only ${availableShares} shares available from platform`);
+          }
+          
+          if (total > userBalance) {
+            throw new Error("Insufficient balance");
+          }
           const newBalance = (userBalance - total).toFixed(2);
           
           // Update user balance
@@ -283,11 +302,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .set({ sharesOutstanding: word.sharesOutstanding + quantityNum, updatedAt: new Date() })
             .where(eq(words.id, wordId));
           
-          // Update or create shareholding
+          // Lock and update or create shareholding
           const [existingHolding] = await tx
             .select()
             .from(shareHoldings)
-            .where(and(eq(shareHoldings.userId, userId), eq(shareHoldings.wordId, wordId)));
+            .where(and(eq(shareHoldings.userId, userId), eq(shareHoldings.wordId, wordId)))
+            .for('update');
           
           if (existingHolding) {
             const newQuantity = existingHolding.quantity + quantityNum;
@@ -332,15 +352,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         res.json({ success: true, transaction: result, receiptId: result.id });
       } else {
-        // SELL logic - validation before transaction
-        const holding = await storage.getShareHolding(userId, wordId);
-        
-        if (!holding || holding.quantity < quantityNum) {
-          return res.status(400).json({ message: `You only own ${holding?.quantity || 0} shares` });
-        }
-        
-        // Use atomic transaction for SELL
+        // SELL logic - all validation inside transaction
         const result = await db.transaction(async (tx) => {
+          // Lock and get word data
+          const [word] = await tx
+            .select()
+            .from(words)
+            .where(eq(words.id, wordId))
+            .for('update');
+          
+          if (!word) {
+            throw new Error("Word not found");
+          }
+          
+          // Lock and get user data
+          const [user] = await tx
+            .select()
+            .from(users)
+            .where(eq(users.id, userId))
+            .for('update');
+          
+          if (!user) {
+            throw new Error("User not found");
+          }
+          
+          // Lock and get holding data
+          const [holding] = await tx
+            .select()
+            .from(shareHoldings)
+            .where(and(eq(shareHoldings.userId, userId), eq(shareHoldings.wordId, wordId)))
+            .for('update');
+          
+          if (!holding || holding.quantity < quantityNum) {
+            throw new Error(`You only own ${holding?.quantity || 0} shares`);
+          }
+          
+          // Calculate prices with locked data
+          const userBalance = parseFloat(user.wbBalance);
+          const intrinsicValue = parseFloat(word.intrinsicValue);
+          const pricePerShare = calculateTradePrice(intrinsicValue, false);
+          const subtotal = pricePerShare * quantityNum;
+          const fee = calculateFee(subtotal);
           const proceeds = subtotal - fee;
           const newBalance = (userBalance + proceeds).toFixed(2);
           
