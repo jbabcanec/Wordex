@@ -1,6 +1,8 @@
 // Replit Auth integration - see blueprint javascript_log_in_with_replit
 import * as client from "openid-client";
 import { Strategy, type VerifyFunction } from "openid-client/passport";
+import { Strategy as LocalStrategy } from "passport-local";
+import bcrypt from "bcryptjs";
 
 import passport from "passport";
 import session from "express-session";
@@ -8,6 +10,9 @@ import type { Express, RequestHandler } from "express";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
+import { db } from "./db";
+import { users } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 const getOidcConfig = memoize(
   async () => {
@@ -69,6 +74,40 @@ export async function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
+  // Set up Local Strategy for username/password authentication
+  passport.use(new LocalStrategy(
+    async (username, password, done) => {
+      try {
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.username, username))
+          .limit(1);
+
+        if (!user || !user.password) {
+          return done(null, false, { message: "Invalid username or password" });
+        }
+
+        const isValid = await bcrypt.compare(password, user.password);
+        if (!isValid) {
+          return done(null, false, { message: "Invalid username or password" });
+        }
+
+        return done(null, {
+          claims: {
+            sub: user.id,
+            email: user.email,
+            first_name: user.firstName,
+            last_name: user.lastName,
+          },
+          isLocal: true,
+        });
+      } catch (error) {
+        return done(error);
+      }
+    }
+  ));
+
   const config = await getOidcConfig();
 
   const verify: VerifyFunction = async (
@@ -122,21 +161,42 @@ export async function setupAuth(app: Express) {
   });
 
   app.get("/api/logout", (req, res) => {
+    const user = req.user as any;
     req.logout(() => {
-      res.redirect(
-        client.buildEndSessionUrl(config, {
-          client_id: process.env.REPL_ID!,
-          post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
-        }).href
-      );
+      if (user?.isLocal) {
+        res.redirect("/");
+      } else {
+        res.redirect(
+          client.buildEndSessionUrl(config, {
+            client_id: process.env.REPL_ID!,
+            post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
+          }).href
+        );
+      }
     });
   });
+
+  // Local login endpoint
+  app.post("/api/login/local", passport.authenticate("local", {
+    successRedirect: "/",
+    failureRedirect: "/?error=invalid_credentials",
+  }));
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   const user = req.user as any;
 
-  if (!req.isAuthenticated() || !user.expires_at) {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  // Local users don't have token expiration
+  if (user.isLocal) {
+    return next();
+  }
+
+  // OIDC users need token refresh
+  if (!user.expires_at) {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
