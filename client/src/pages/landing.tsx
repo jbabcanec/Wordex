@@ -1,7 +1,49 @@
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import { TrendingUp, Zap, DollarSign, Trophy } from "lucide-react";
 
 export default function Landing() {
+  const [showLocalLogin, setShowLocalLogin] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('error') === 'invalid_credentials') {
+      setError('Invalid username or password');
+      setShowLocalLogin(true);
+    }
+  }, []);
+
+  const handleLocalLogin = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    
+    fetch('/api/login/local', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        username: formData.get('username') as string,
+        password: formData.get('password') as string,
+      }),
+      credentials: 'include',
+    })
+      .then(response => {
+        if (response.redirected) {
+          window.location.href = response.url;
+        } else if (!response.ok) {
+          setError('Invalid username or password');
+        }
+      })
+      .catch(() => {
+        setError('Login failed. Please try again.');
+      });
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
@@ -13,19 +55,97 @@ export default function Landing() {
               <h1 className="text-2xl font-display font-bold tracking-tight">WORDEX</h1>
             </div>
           </div>
-          <Button 
-            size="default"
-            onClick={() => window.location.href = '/api/login'}
-            data-testid="button-login"
-          >
-            Get Started
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              size="default"
+              variant={showLocalLogin ? "outline" : "default"}
+              onClick={() => window.location.href = '/api/login'}
+              data-testid="button-login"
+            >
+              Get Started
+            </Button>
+            <Button 
+              size="default"
+              variant={showLocalLogin ? "default" : "outline"}
+              onClick={() => setShowLocalLogin(!showLocalLogin)}
+              data-testid="button-toggle-local-login"
+            >
+              Local Login
+            </Button>
+          </div>
         </div>
       </header>
 
       {/* Hero Section */}
       <section className="flex-1 flex items-center justify-center py-24 px-6">
         <div className="container max-w-screen-xl mx-auto">
+          {showLocalLogin ? (
+            <div className="flex flex-col items-center gap-8 max-w-md mx-auto">
+              <div className="space-y-2 text-center">
+                <h2 className="text-4xl font-display font-bold tracking-tight">
+                  Local Login
+                </h2>
+                <p className="text-muted-foreground">
+                  Sign in with your username and password
+                </p>
+              </div>
+
+              <Card className="w-full">
+                <CardContent className="p-6">
+                  <form onSubmit={handleLocalLogin} className="space-y-4">
+                    <div className="space-y-2">
+                      <label htmlFor="username" className="text-sm font-medium">
+                        Username
+                      </label>
+                      <Input
+                        id="username"
+                        name="username"
+                        type="text"
+                        placeholder="Enter username"
+                        required
+                        data-testid="input-username"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label htmlFor="password" className="text-sm font-medium">
+                        Password
+                      </label>
+                      <Input
+                        id="password"
+                        name="password"
+                        type="password"
+                        placeholder="Enter password"
+                        required
+                        data-testid="input-password"
+                      />
+                    </div>
+
+                    {error && (
+                      <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+                        {error}
+                      </div>
+                    )}
+
+                    <Button type="submit" className="w-full" data-testid="button-local-login-submit">
+                      Sign In
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  setShowLocalLogin(false);
+                  setError(null);
+                }}
+                data-testid="button-back-to-landing"
+              >
+                Back to Landing
+              </Button>
+            </div>
+          ) : (
           <div className="flex flex-col items-center text-center gap-8">
             {/* Main Headline */}
             <div className="space-y-4">
@@ -124,6 +244,7 @@ export default function Landing() {
               </div>
             </div>
           </div>
+          )}
         </div>
       </section>
 
