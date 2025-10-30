@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { formatWB } from "@/lib/utils";
 import { StockTicker } from "@/components/StockTicker";
 import { SubmitWordModal } from "@/components/SubmitWordModal";
+import { WelcomeTour, useShouldShowTour } from "@/components/WelcomeTour";
 import { WordCard } from "@/components/WordCard";
 import { EventFeed } from "@/components/EventFeed";
 import { Portfolio } from "@/components/Portfolio";
@@ -17,6 +18,7 @@ import {
   User,
   Wallet,
   BarChart3,
+  HelpCircle,
 } from "lucide-react";
 import type { Word } from "@shared/schema";
 
@@ -28,11 +30,20 @@ interface WordWithHolding extends Word {
 export default function Dashboard() {
   const { user } = useAuth();
   const [submitWordModalOpen, setSubmitWordModalOpen] = useState(false);
+  const shouldShowTour = useShouldShowTour(user);
+  const [tourOpen, setTourOpen] = useState(false);
 
   const { data: topWords, isLoading: topWordsLoading } = useQuery<WordWithHolding[]>({
     queryKey: ["/api/words/top"],
     refetchInterval: 10000,
   });
+
+  // Open tour when shouldShowTour becomes true
+  useEffect(() => {
+    if (shouldShowTour) {
+      setTourOpen(true);
+    }
+  }, [shouldShowTour]);
 
   if (!user) {
     return null;
@@ -48,11 +59,24 @@ export default function Dashboard() {
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-3">
               <TrendingUp className="h-6 w-6 text-primary" />
-              <h1 className="text-xl font-display font-bold tracking-tight">WORDEX</h1>
+              <div>
+                <h1 className="text-xl font-display font-bold tracking-tight">WORDEX</h1>
+                <p className="text-xs text-muted-foreground">by Floj</p>
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setTourOpen(true)}
+              data-testid="button-help"
+            >
+              <HelpCircle className="h-4 w-4 mr-2" />
+              Help
+            </Button>
+
             <Card className="border-2 border-primary/20 bg-primary/5">
               <CardContent className="p-3 flex items-center gap-3">
                 <Wallet className="h-5 w-5 text-primary" />
@@ -175,6 +199,12 @@ export default function Dashboard() {
       <SubmitWordModal
         open={submitWordModalOpen}
         onOpenChange={setSubmitWordModalOpen}
+      />
+
+      {/* Welcome Tour */}
+      <WelcomeTour
+        open={tourOpen}
+        onOpenChange={setTourOpen}
       />
     </div>
   );
