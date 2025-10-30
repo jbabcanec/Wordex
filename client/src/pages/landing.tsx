@@ -5,21 +5,20 @@ import { Card, CardContent } from "@/components/ui/card";
 import { TrendingUp, Zap, DollarSign, Trophy } from "lucide-react";
 
 export default function Landing() {
-  const [showLocalLogin, setShowLocalLogin] = useState(false);
+  const [showAuth, setShowAuth] = useState<'login' | 'signup' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('error') === 'invalid_credentials') {
       setError('Invalid username or password');
-      setShowLocalLogin(true);
+      setShowAuth('login');
     }
   }, []);
 
   const handleLocalLogin = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const form = e.currentTarget;
     
     fetch('/api/login/local', {
       method: 'POST',
@@ -44,6 +43,41 @@ export default function Landing() {
       });
   };
 
+  const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+    const formData = new FormData(e.currentTarget);
+    
+    try {
+      const response = await fetch('/api/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: formData.get('username') as string,
+          password: formData.get('password') as string,
+          email: formData.get('email') as string || undefined,
+          firstName: formData.get('firstName') as string || undefined,
+          lastName: formData.get('lastName') as string || undefined,
+        }),
+        credentials: 'include',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.message || 'Signup failed');
+        return;
+      }
+
+      // Signup successful, redirect to dashboard
+      window.location.href = '/';
+    } catch (err) {
+      setError('Signup failed. Please try again.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
@@ -61,23 +95,21 @@ export default function Landing() {
           <div className="flex gap-2">
             <Button 
               size="sm"
-              variant={showLocalLogin ? "outline" : "default"}
-              onClick={() => window.location.href = '/api/login'}
-              data-testid="button-login"
+              variant={showAuth === 'signup' ? "default" : "outline"}
+              onClick={() => setShowAuth(showAuth === 'signup' ? null : 'signup')}
+              data-testid="button-signup"
               className="text-xs sm:text-sm"
             >
-              <span className="hidden sm:inline">Get Started</span>
-              <span className="sm:hidden">Start</span>
+              Sign Up
             </Button>
             <Button 
               size="sm"
-              variant={showLocalLogin ? "default" : "outline"}
-              onClick={() => setShowLocalLogin(!showLocalLogin)}
+              variant={showAuth === 'login' ? "default" : "outline"}
+              onClick={() => setShowAuth(showAuth === 'login' ? null : 'login')}
               data-testid="button-toggle-local-login"
               className="text-xs sm:text-sm"
             >
-              <span className="hidden sm:inline">Local Login</span>
-              <span className="sm:hidden">Login</span>
+              Login
             </Button>
           </div>
         </div>
@@ -86,11 +118,11 @@ export default function Landing() {
       {/* Hero Section */}
       <section className="flex-1 flex items-center justify-center py-8 sm:py-24 px-3 sm:px-6">
         <div className="container max-w-screen-xl mx-auto">
-          {showLocalLogin ? (
+          {showAuth === 'login' ? (
             <div className="flex flex-col items-center gap-6 sm:gap-8 max-w-md mx-auto">
               <div className="space-y-2 text-center">
                 <h2 className="text-2xl sm:text-4xl font-display font-bold tracking-tight">
-                  Local Login
+                  Login
                 </h2>
                 <p className="text-sm sm:text-base text-muted-foreground">
                   Sign in with your username and password
@@ -144,10 +176,116 @@ export default function Landing() {
               <Button 
                 variant="outline"
                 onClick={() => {
-                  setShowLocalLogin(false);
+                  setShowAuth(null);
                   setError(null);
                 }}
                 data-testid="button-back-to-landing"
+              >
+                Back to Landing
+              </Button>
+            </div>
+          ) : showAuth === 'signup' ? (
+            <div className="flex flex-col items-center gap-6 sm:gap-8 max-w-md mx-auto">
+              <div className="space-y-2 text-center">
+                <h2 className="text-2xl sm:text-4xl font-display font-bold tracking-tight">
+                  Sign Up
+                </h2>
+                <p className="text-sm sm:text-base text-muted-foreground">
+                  Create your account to start trading
+                </p>
+              </div>
+
+              <Card className="w-full">
+                <CardContent className="p-4 sm:p-6">
+                  <form onSubmit={handleSignup} className="space-y-4">
+                    <div className="space-y-2">
+                      <label htmlFor="signup-username" className="text-sm font-medium">
+                        Username
+                      </label>
+                      <Input
+                        id="signup-username"
+                        name="username"
+                        type="text"
+                        placeholder="Choose a username"
+                        required
+                        data-testid="input-signup-username"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label htmlFor="signup-password" className="text-sm font-medium">
+                        Password
+                      </label>
+                      <Input
+                        id="signup-password"
+                        name="password"
+                        type="password"
+                        placeholder="Choose a password (min 6 chars)"
+                        required
+                        data-testid="input-signup-password"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label htmlFor="signup-email" className="text-sm font-medium">
+                        Email (optional)
+                      </label>
+                      <Input
+                        id="signup-email"
+                        name="email"
+                        type="email"
+                        placeholder="your@email.com"
+                        data-testid="input-signup-email"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <label htmlFor="signup-firstname" className="text-sm font-medium">
+                          First Name (optional)
+                        </label>
+                        <Input
+                          id="signup-firstname"
+                          name="firstName"
+                          type="text"
+                          placeholder="First name"
+                          data-testid="input-signup-firstname"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label htmlFor="signup-lastname" className="text-sm font-medium">
+                          Last Name (optional)
+                        </label>
+                        <Input
+                          id="signup-lastname"
+                          name="lastName"
+                          type="text"
+                          placeholder="Last name"
+                          data-testid="input-signup-lastname"
+                        />
+                      </div>
+                    </div>
+
+                    {error && (
+                      <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+                        {error}
+                      </div>
+                    )}
+
+                    <Button type="submit" className="w-full" data-testid="button-signup-submit">
+                      Create Account
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  setShowAuth(null);
+                  setError(null);
+                }}
+                data-testid="button-back-to-landing-signup"
               >
                 Back to Landing
               </Button>
