@@ -35,6 +35,7 @@ Preferred communication style: Simple, everyday language.
 - Optimistic UI updates with query invalidation
 - Toast notifications for user feedback
 - Modal-based interactions for trading and word submission
+- Horizontally scrollable stock ticker banner showing top trending words with day-over-day price changes
 
 ### Backend Architecture
 
@@ -56,6 +57,7 @@ Preferred communication style: Simple, everyday language.
 - **Supply/Demand Pricing**: Bonding curve algorithm where price increases with shares sold. Each word starts at 1.00 WB base price with 1,000 total shares. Price formula: `basePrice × (1 + 0.5 × sharesOutstanding / totalShares)`
 - **Word Submission**: Costs 10 WB to submit a word, submitter automatically receives 50 shares (5% of total supply)
 - **WordBucks Economy**: Virtual currency system with initial 10,000 WB signup bonus
+- **Ticker Percentage Change**: Day-over-day price change calculated by comparing current price to most recent transaction from before today (midnight). Shows 0% for words without yesterday's trading data.
 
 ### Database Architecture
 
