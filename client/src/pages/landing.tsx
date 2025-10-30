@@ -323,7 +323,7 @@ export default function Landing() {
               <Button 
                 size="lg"
                 className="text-base sm:text-lg px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-auto"
-                onClick={() => window.location.href = '/api/login'}
+                onClick={() => setShowAuth('signup')}
                 data-testid="button-get-started"
               >
                 Start Trading
