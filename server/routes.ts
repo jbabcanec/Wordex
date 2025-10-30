@@ -1,0 +1,540 @@
+import type { Express } from "express";
+import { createServer, type Server } from "http";
+import { WebSocketServer, WebSocket } from "ws";
+import { storage } from "./storage";
+import { setupAuth, isAuthenticated } from "./replitAuth";
+import { db } from "./db";
+import { words, users, transactions, receipts, shareHoldings } from "@shared/schema";
+import { eq, and } from "drizzle-orm";
+
+// Helper function to normalize word text: ALL CAPS, NO SPACES
+function normalizeWord(text: string): string {
+  return text.toUpperCase().replace(/\s+/g, '');
+}
+
+// Helper function to calculate trade price with platform spread (IV ± 2%)
+function calculateTradePrice(intrinsicValue: number, isBuy: boolean): number {
+  return isBuy ? intrinsicValue * 1.02 : intrinsicValue * 0.98;
+}
+
+// Helper function to calculate fee (0.5%)
+function calculateFee(amount: number): number {
+  return amount * 0.005;
+}
+
+// Helper function to generate receipt data
+function generateReceiptData(transaction: any, word?: any): any {
+  return {
+    receiptId: transaction.id,
+    date: transaction.createdAt,
+    action: transaction.type,
+    word: word?.textNormalized || null,
+    quantity: transaction.quantity,
+    pricePerShare: transaction.pricePerShare,
+    totalAmount: transaction.totalAmount,
+    fee: transaction.fee,
+    balanceBefore: transaction.balanceBefore,
+    balanceAfter: transaction.balanceAfter,
+    description: transaction.description,
+    transactionId: transaction.id,
+  };
+}
+
+export async function registerRoutes(app: Express): Promise<Server> {
+  // Auth middleware
+  await setupAuth(app);
+
+  // Auth routes
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Check for daily login bonus (100 WB if last login was > 24 hours ago)
+      const now = new Date();
+      const lastLogin = user.lastLogin ? new Date(user.lastLogin) : null;
+      
+      if (!lastLogin || (now.getTime() - lastLogin.getTime()) > 24 * 60 * 60 * 1000) {
+        // Use atomic transaction for daily bonus
+        await db.transaction(async (tx) => {
+          const dailyBonus = 100;
+          const newBalance = (parseFloat(user.wbBalance) + dailyBonus).toFixed(2);
+          const newEarnings = (parseFloat(user.totalEarnings) + dailyBonus).toFixed(2);
+          
+          // Update user balance and login atomically
+          await tx
+            .update(users)
+            .set({ 
+              wbBalance: newBalance,
+              totalEarnings: newEarnings,
+              lastLogin: now,
+              updatedAt: new Date()
+            })
+            .where(eq(users.id, userId));
+          
+          // Create transaction record
+          const [transaction] = await tx
+            .insert(transactions)
+            .values({
+              userId,
+              wordId: null,
+              type: 'DAILY_LOGIN',
+              quantity: null,
+              pricePerShare: null,
+              totalAmount: dailyBonus.toFixed(2),
+              fee: '0.00',
+              balanceBefore: user.wbBalance,
+              balanceAfter: newBalance,
+              description: 'Daily login bonus',
+            })
+            .returning();
+          
+          // Create receipt
+          await tx
+            .insert(receipts)
+            .values({
+              transactionId: transaction.id,
+              receiptData: generateReceiptData(transaction),
+            });
+          
+          user.wbBalance = newBalance;
+          user.totalEarnings = newEarnings;
+          user.lastLogin = now;
+        });
+      }
+      
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Word submission endpoint
+  app.post('/api/words', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { text } = req.body;
+      
+      if (!text || typeof text !== 'string') {
+        return res.status(400).json({ message: "Invalid word text" });
+      }
+      
+      const normalized = normalizeWord(text);
+      
+      if (normalized.length === 0 || normalized.length > 100) {
+        return res.status(400).json({ message: "Word must be 1-100 characters after normalization" });
+      }
+      
+      // Check for duplicates
+      const existing = await storage.getWordByNormalizedText(normalized);
+      if (existing) {
+        return res.status(400).json({ message: "This word already exists" });
+      }
+      
+      // Get user balance
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const balance = parseFloat(user.wbBalance);
+      const submissionFee = 10;
+      
+      if (balance < submissionFee) {
+        return res.status(400).json({ message: "Insufficient balance. Need 10 WB to submit a word." });
+      }
+      
+      // Use atomic transaction for word submission
+      const result = await db.transaction(async (tx) => {
+        const newBalance = (balance - submissionFee).toFixed(2);
+        
+        // Update user balance
+        await tx
+          .update(users)
+          .set({ wbBalance: newBalance, updatedAt: new Date() })
+          .where(eq(users.id, userId));
+        
+        // Create the word
+        const [word] = await tx
+          .insert(words)
+          .values({
+            textNormalized: normalized,
+            displayText: text,
+            submitterId: userId,
+          })
+          .returning();
+        
+        // Grant creator 50 shares
+        const creatorShares = 50;
+        const costBasis = '0.00';
+        await tx
+          .insert(shareHoldings)
+          .values({
+            userId,
+            wordId: word.id,
+            quantity: creatorShares,
+            costBasis,
+          });
+        
+        // Create transaction record
+        const [transaction] = await tx
+          .insert(transactions)
+          .values({
+            userId,
+            wordId: word.id,
+            type: 'SUBMIT_WORD',
+            quantity: creatorShares,
+            pricePerShare: '0.00',
+            totalAmount: `-${submissionFee.toFixed(2)}`,
+            fee: '0.00',
+            balanceBefore: user.wbBalance,
+            balanceAfter: newBalance,
+            description: `Submitted word: ${normalized} (received ${creatorShares} creator shares)`,
+          })
+          .returning();
+        
+        // Create receipt
+        await tx
+          .insert(receipts)
+          .values({
+            transactionId: transaction.id,
+            receiptData: generateReceiptData(transaction, word),
+          });
+        
+        return { word, transaction };
+      });
+      
+      res.json({ ...result, receiptId: result.transaction.id });
+    } catch (error: any) {
+      console.error("Error submitting word:", error);
+      res.status(500).json({ message: error.message || "Failed to submit word" });
+    }
+  });
+
+  // Trading endpoint (buy/sell)
+  app.post('/api/trade', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { wordId, quantity, action } = req.body;
+      
+      if (!wordId || !quantity || !action) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      
+      if (!['buy', 'sell'].includes(action)) {
+        return res.status(400).json({ message: "Action must be 'buy' or 'sell'" });
+      }
+      
+      const quantityNum = parseInt(quantity);
+      if (isNaN(quantityNum) || quantityNum <= 0) {
+        return res.status(400).json({ message: "Invalid quantity" });
+      }
+      
+      // Get word
+      const word = await storage.getWord(wordId);
+      if (!word) {
+        return res.status(404).json({ message: "Word not found" });
+      }
+      
+      // Get user
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const userBalance = parseFloat(user.wbBalance);
+      const intrinsicValue = parseFloat(word.intrinsicValue);
+      const isBuy = action === 'buy';
+      const pricePerShare = calculateTradePrice(intrinsicValue, isBuy);
+      const subtotal = pricePerShare * quantityNum;
+      const fee = calculateFee(subtotal);
+      const total = subtotal + fee;
+      
+      if (isBuy) {
+        // BUY logic - validation before transaction
+        const availableShares = word.totalShares - word.sharesOutstanding;
+        
+        if (quantityNum > availableShares) {
+          return res.status(400).json({ message: `Only ${availableShares} shares available from platform` });
+        }
+        
+        if (total > userBalance) {
+          return res.status(400).json({ message: "Insufficient balance" });
+        }
+        
+        // Use atomic transaction for BUY
+        const result = await db.transaction(async (tx) => {
+          const newBalance = (userBalance - total).toFixed(2);
+          
+          // Update user balance
+          await tx
+            .update(users)
+            .set({ wbBalance: newBalance, updatedAt: new Date() })
+            .where(eq(users.id, userId));
+          
+          // Update shares outstanding
+          await tx
+            .update(words)
+            .set({ sharesOutstanding: word.sharesOutstanding + quantityNum, updatedAt: new Date() })
+            .where(eq(words.id, wordId));
+          
+          // Update or create shareholding
+          const [existingHolding] = await tx
+            .select()
+            .from(shareHoldings)
+            .where(and(eq(shareHoldings.userId, userId), eq(shareHoldings.wordId, wordId)));
+          
+          if (existingHolding) {
+            const newQuantity = existingHolding.quantity + quantityNum;
+            const newCostBasis = (parseFloat(existingHolding.costBasis) + subtotal).toFixed(2);
+            await tx
+              .update(shareHoldings)
+              .set({ quantity: newQuantity, costBasis: newCostBasis, updatedAt: new Date() })
+              .where(eq(shareHoldings.id, existingHolding.id));
+          } else {
+            await tx
+              .insert(shareHoldings)
+              .values({ userId, wordId, quantity: quantityNum, costBasis: subtotal.toFixed(2) });
+          }
+          
+          // Create transaction record
+          const [transaction] = await tx
+            .insert(transactions)
+            .values({
+              userId,
+              wordId,
+              type: 'BUY',
+              quantity: quantityNum,
+              pricePerShare: pricePerShare.toFixed(2),
+              totalAmount: subtotal.toFixed(2),
+              fee: fee.toFixed(2),
+              balanceBefore: user.wbBalance,
+              balanceAfter: newBalance,
+              description: `Bought ${quantityNum} shares of ${word.textNormalized}`,
+            })
+            .returning();
+          
+          // Create receipt
+          await tx
+            .insert(receipts)
+            .values({
+              transactionId: transaction.id,
+              receiptData: generateReceiptData(transaction, word),
+            });
+          
+          return transaction;
+        });
+        
+        res.json({ success: true, transaction: result, receiptId: result.id });
+      } else {
+        // SELL logic - validation before transaction
+        const holding = await storage.getShareHolding(userId, wordId);
+        
+        if (!holding || holding.quantity < quantityNum) {
+          return res.status(400).json({ message: `You only own ${holding?.quantity || 0} shares` });
+        }
+        
+        // Use atomic transaction for SELL
+        const result = await db.transaction(async (tx) => {
+          const proceeds = subtotal - fee;
+          const newBalance = (userBalance + proceeds).toFixed(2);
+          
+          // Update user balance
+          await tx
+            .update(users)
+            .set({ wbBalance: newBalance, updatedAt: new Date() })
+            .where(eq(users.id, userId));
+          
+          // Update shares outstanding
+          await tx
+            .update(words)
+            .set({ sharesOutstanding: word.sharesOutstanding - quantityNum, updatedAt: new Date() })
+            .where(eq(words.id, wordId));
+          
+          // Update or delete shareholding
+          const newQuantity = holding.quantity - quantityNum;
+          if (newQuantity > 0) {
+            const costBasisPerShare = parseFloat(holding.costBasis) / holding.quantity;
+            const newCostBasis = (costBasisPerShare * newQuantity).toFixed(2);
+            await tx
+              .update(shareHoldings)
+              .set({ quantity: newQuantity, costBasis: newCostBasis, updatedAt: new Date() })
+              .where(eq(shareHoldings.id, holding.id));
+          } else {
+            await tx
+              .delete(shareHoldings)
+              .where(eq(shareHoldings.id, holding.id));
+          }
+          
+          // Create transaction record
+          const [transaction] = await tx
+            .insert(transactions)
+            .values({
+              userId,
+              wordId,
+              type: 'SELL',
+              quantity: quantityNum,
+              pricePerShare: pricePerShare.toFixed(2),
+              totalAmount: subtotal.toFixed(2),
+              fee: fee.toFixed(2),
+              balanceBefore: user.wbBalance,
+              balanceAfter: newBalance,
+              description: `Sold ${quantityNum} shares of ${word.textNormalized}`,
+            })
+            .returning();
+          
+          // Create receipt
+          await tx
+            .insert(receipts)
+            .values({
+              transactionId: transaction.id,
+              receiptData: generateReceiptData(transaction, word),
+            });
+          
+          return transaction;
+        });
+        
+        res.json({ success: true, transaction: result, receiptId: result.id });
+      }
+    } catch (error: any) {
+      console.error("Error executing trade:", error);
+      res.status(500).json({ message: error.message || "Failed to execute trade" });
+    }
+  });
+
+  // Get top words by intrinsic value
+  app.get('/api/words/top', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const topWords = await storage.getTopWords(20);
+      
+      // Enrich with user's shareholdings
+      const enrichedWords = await Promise.all(
+        topWords.map(async (word) => {
+          const holding = await storage.getShareHolding(userId, word.id);
+          return {
+            ...word,
+            userShares: holding?.quantity || 0,
+          };
+        })
+      );
+      
+      res.json(enrichedWords);
+    } catch (error) {
+      console.error("Error fetching top words:", error);
+      res.status(500).json({ message: "Failed to fetch words" });
+    }
+  });
+
+  // Get trending words for ticker
+  app.get('/api/words/trending', async (req, res) => {
+    try {
+      const trendingWords = await storage.getTopWords(10);
+      
+      const enriched = trendingWords.map((word) => ({
+        id: word.id,
+        textNormalized: word.textNormalized,
+        intrinsicValue: word.intrinsicValue,
+        change24h: 0, // TODO: Calculate from historical data
+      }));
+      
+      res.json(enriched);
+    } catch (error) {
+      console.error("Error fetching trending words:", error);
+      res.status(500).json({ message: "Failed to fetch trending words" });
+    }
+  });
+
+  // Get user portfolio
+  app.get('/api/portfolio', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const holdings = await storage.getUserPortfolio(userId);
+      
+      const enriched = await Promise.all(
+        holdings.map(async (holding) => {
+          const word = await storage.getWord(holding.wordId);
+          if (!word) return null;
+          
+          const currentValue = parseFloat(word.intrinsicValue) * holding.quantity;
+          const costBasis = parseFloat(holding.costBasis);
+          const profitLoss = currentValue - costBasis;
+          const profitLossPercent = costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
+          
+          return {
+            word: {
+              id: word.id,
+              textNormalized: word.textNormalized,
+              intrinsicValue: word.intrinsicValue,
+            },
+            quantity: holding.quantity,
+            costBasis: holding.costBasis,
+            currentValue,
+            profitLoss,
+            profitLossPercent,
+          };
+        })
+      );
+      
+      res.json(enriched.filter(Boolean));
+    } catch (error) {
+      console.error("Error fetching portfolio:", error);
+      res.status(500).json({ message: "Failed to fetch portfolio" });
+    }
+  });
+
+  // Get recent events
+  app.get('/api/events/recent', async (req, res) => {
+    try {
+      const events = await storage.getRecentEvents(20);
+      
+      const enriched = await Promise.all(
+        events.map(async (event) => {
+          const word = await storage.getWord(event.wordId);
+          return {
+            ...event,
+            word: {
+              textNormalized: word?.textNormalized || 'UNKNOWN',
+            },
+          };
+        })
+      );
+      
+      res.json(enriched);
+    } catch (error) {
+      console.error("Error fetching events:", error);
+      res.status(500).json({ message: "Failed to fetch events" });
+    }
+  });
+
+  // Get leaderboard
+  app.get('/api/leaderboard', async (req, res) => {
+    try {
+      const topTraders = await storage.getTopTraders(10);
+      res.json(topTraders);
+    } catch (error) {
+      console.error("Error fetching leaderboard:", error);
+      res.status(500).json({ message: "Failed to fetch leaderboard" });
+    }
+  });
+
+  const httpServer = createServer(app);
+
+  // WebSocket for real-time updates - see blueprint javascript_websocket
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  
+  wss.on('connection', (ws: WebSocket) => {
+    console.log('WebSocket client connected');
+    
+    ws.on('close', () => {
+      console.log('WebSocket client disconnected');
+    });
+  });
+
+  return httpServer;
+}
