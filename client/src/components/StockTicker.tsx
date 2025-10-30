@@ -26,19 +26,20 @@ export function StockTicker() {
     );
   }
 
-  // Duplicate words for seamless scrolling
-  const tickerWords = [...words, ...words];
-
   return (
-    <div className="h-12 border-b bg-card overflow-hidden relative">
-      <div className="absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-card to-transparent z-10" />
-      <div className="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-card to-transparent z-10" />
+    <div className="h-12 border-b bg-card relative">
+      <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-card to-transparent z-10 pointer-events-none" />
+      <div className="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-card to-transparent z-10 pointer-events-none" />
       
-      <div className="flex items-center h-full animate-scroll-slow">
-        {tickerWords.map((word, index) => (
+      <div 
+        className="flex items-center h-full overflow-x-auto scrollbar-hide"
+        data-testid="stock-ticker-scroll"
+      >
+        {words.map((word) => (
           <div
-            key={`${word.id}-${index}`}
-            className="flex items-center gap-3 px-6 whitespace-nowrap border-r border-border/50"
+            key={word.id}
+            className="flex items-center gap-3 px-6 whitespace-nowrap border-r border-border/50 flex-shrink-0"
+            data-testid={`ticker-word-${word.id}`}
           >
             <span className="font-mono font-semibold text-sm tracking-wider">
               {word.textNormalized}
@@ -51,6 +52,7 @@ export function StockTicker() {
                 "flex items-center gap-1 text-xs font-mono font-medium",
                 word.change24h >= 0 ? "text-gain" : "text-loss"
               )}
+              data-testid={`ticker-change-${word.id}`}
             >
               {word.change24h >= 0 ? (
                 <TrendingUp className="h-3 w-3" />
@@ -64,16 +66,12 @@ export function StockTicker() {
       </div>
 
       <style>{`
-        @keyframes scroll-slow {
-          0% {
-            transform: translateX(0);
-          }
-          100% {
-            transform: translateX(-50%);
-          }
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
         }
-        .animate-scroll-slow {
-          animation: scroll-slow 60s linear infinite;
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
         }
       `}</style>
     </div>

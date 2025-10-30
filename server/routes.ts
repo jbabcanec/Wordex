@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { db } from "./db";
 import { words, users, transactions, receipts, shareHoldings } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql, desc } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import passport from "passport";
 
@@ -597,12 +597,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const trendingWords = await storage.getTopWords(10);
       
-      const enriched = trendingWords.map((word) => ({
-        id: word.id,
-        textNormalized: word.textNormalized,
-        currentPrice: word.currentPrice,
-        change24h: 0, // TODO: Calculate from historical data
-      }));
+      // Calculate percentage change from last day of activity
+      // Look for transactions from yesterday (previous calendar day)
+      const enriched = await Promise.all(
+        trendingWords.map(async (word) => {
+          // Get start of today (midnight)
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          // Get the most recent transaction from before today (yesterday or earlier)
+          const oldTransactions = await db
+            .select()
+            .from(transactions)
+            .where(
+              and(
+                eq(transactions.wordId, word.id),
+                sql`${transactions.type} IN ('BUY', 'SELL')`,
+                sql`${transactions.createdAt} < ${today}`
+              )
+            )
+            .orderBy(desc(transactions.createdAt))
+            .limit(1);
+          
+          let change24h = 0;
+          
+          if (oldTransactions.length > 0 && oldTransactions[0].pricePerShare) {
+            const oldPrice = parseFloat(oldTransactions[0].pricePerShare);
+            const currentPrice = parseFloat(word.currentPrice);
+            
+            if (oldPrice > 0) {
+              change24h = ((currentPrice - oldPrice) / oldPrice) * 100;
+            }
+          }
+          
+          return {
+            id: word.id,
+            textNormalized: word.textNormalized,
+            currentPrice: word.currentPrice,
+            change24h,
+          };
+        })
+      );
       
       res.json(enriched);
     } catch (error) {
