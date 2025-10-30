@@ -52,7 +52,10 @@ export default function Landing() {
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 sm:gap-3">
               <TrendingUp className="h-5 w-5 sm:h-7 sm:w-7 text-primary" />
-              <h1 className="text-lg sm:text-2xl font-display font-bold tracking-tight">WORDEX</h1>
+              <div>
+                <h1 className="text-lg sm:text-2xl font-display font-bold tracking-tight">WORDEX</h1>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">by Floj</p>
+              </div>
             </div>
           </div>
           <div className="flex gap-2">
