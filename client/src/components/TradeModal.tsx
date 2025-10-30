@@ -23,7 +23,7 @@ interface TradeModalProps {
   word: {
     id: string;
     textNormalized: string;
-    intrinsicValue: string;
+    currentPrice: string;
     sharesOutstanding: number;
     totalShares: number;
   };
@@ -74,10 +74,10 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
     },
   });
 
-  const intrinsicValue = parseFloat(word.intrinsicValue);
+  const currentPrice = parseFloat(word.currentPrice);
   const quantityNum = parseInt(quantity) || 0;
   const isBuy = activeTab === "buy";
-  const pricePerShare = calculateTradePrice(intrinsicValue, isBuy);
+  const pricePerShare = calculateTradePrice(currentPrice, isBuy);
   const subtotal = pricePerShare * quantityNum;
   const fee = calculateFee(subtotal);
   const total = subtotal + fee;
@@ -105,7 +105,7 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
             {word.textNormalized}
           </DialogTitle>
           <DialogDescription className="text-sm">
-            Intrinsic Value: {formatWB(intrinsicValue)} WB
+            Current Price: {formatWB(currentPrice)} WB
           </DialogDescription>
         </DialogHeader>
 

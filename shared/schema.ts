@@ -50,15 +50,13 @@ export const words = pgTable("words", {
   textNormalized: varchar("text_normalized", { length: 100 }).notNull().unique(), // ALL CAPS, NO SPACES
   displayText: varchar("display_text", { length: 100 }).notNull(), // Original submission (for display)
   submitterId: varchar("submitter_id").notNull().references(() => users.id),
-  baseValue: decimal("base_value", { precision: 10, scale: 2 }).notNull().default('1.00'),
-  eventPoints: integer("event_points").notNull().default(0),
-  intrinsicValue: decimal("intrinsic_value", { precision: 10, scale: 2 }).notNull().default('1.00'),
+  currentPrice: decimal("current_price", { precision: 10, scale: 2 }).notNull().default('1.00'),
   totalShares: integer("total_shares").notNull().default(1000),
   sharesOutstanding: integer("shares_outstanding").notNull().default(50), // Starts with submitter's 50 shares
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
-  index("idx_words_intrinsic_value").on(table.intrinsicValue),
+  index("idx_words_current_price").on(table.currentPrice),
   index("idx_words_created_at").on(table.createdAt),
 ]);
 
@@ -68,15 +66,12 @@ export const wordsRelations = relations(words, ({ one, many }) => ({
     references: [users.id],
   }),
   shareHoldings: many(shareHoldings),
-  events: many(events),
   transactions: many(transactions),
 }));
 
 export const insertWordSchema = createInsertSchema(words).omit({
   id: true,
-  baseValue: true,
-  eventPoints: true,
-  intrinsicValue: true,
+  currentPrice: true,
   totalShares: true,
   sharesOutstanding: true,
   createdAt: true,
@@ -118,7 +113,7 @@ export const transactions = pgTable("transactions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   wordId: varchar("word_id").references(() => words.id), // Null for non-trading transactions
-  type: varchar("type", { length: 50 }).notNull(), // 'BUY', 'SELL', 'SUBMIT_WORD', 'DIVIDEND', 'DAILY_LOGIN', 'EVENT_REWARD'
+  type: varchar("type", { length: 50 }).notNull(), // 'BUY', 'SELL', 'SUBMIT_WORD', 'DAILY_LOGIN'
   quantity: integer("quantity"), // Null for non-share transactions
   pricePerShare: decimal("price_per_share", { precision: 10, scale: 2 }), // Null for non-trading
   totalAmount: decimal("total_amount", { precision: 20, scale: 2 }).notNull(),
@@ -145,79 +140,6 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
 }));
 
 export type Transaction = typeof transactions.$inferSelect;
-
-// Events table - power events that affect word value
-export const events = pgTable("events", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  wordId: varchar("word_id").notNull().references(() => words.id),
-  submitterId: varchar("submitter_id").notNull().references(() => users.id),
-  points: integer("points").notNull(),
-  description: text("description").notNull(),
-  proofLink: text("proof_link"), // Optional URL for proof
-  validated: boolean("validated").notNull().default(false),
-  votesFor: integer("votes_for").notNull().default(0),
-  votesAgainst: integer("votes_against").notNull().default(0),
-  validationDeadline: timestamp("validation_deadline").notNull(), // 24 hours from submission
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  validatedAt: timestamp("validated_at"),
-}, (table) => [
-  index("idx_events_word").on(table.wordId),
-  index("idx_events_validated").on(table.validated),
-  index("idx_events_created_at").on(table.createdAt),
-]);
-
-export const eventsRelations = relations(events, ({ one, many }) => ({
-  word: one(words, {
-    fields: [events.wordId],
-    references: [words.id],
-  }),
-  submitter: one(users, {
-    fields: [events.submitterId],
-    references: [users.id],
-  }),
-  votes: many(eventVotes),
-}));
-
-export const insertEventSchema = createInsertSchema(events).omit({
-  id: true,
-  validated: true,
-  votesFor: true,
-  votesAgainst: true,
-  validationDeadline: true,
-  createdAt: true,
-  validatedAt: true,
-}).extend({
-  points: z.number().int().min(1).max(10000),
-  description: z.string().min(10).max(500),
-});
-
-export type InsertEvent = z.infer<typeof insertEventSchema>;
-export type Event = typeof events.$inferSelect;
-
-// EventVotes table - tracks who voted on each event
-export const eventVotes = pgTable("event_votes", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  eventId: varchar("event_id").notNull().references(() => events.id),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  vote: boolean("vote").notNull(), // true = for, false = against
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => [
-  index("idx_event_votes_event").on(table.eventId),
-  index("idx_event_votes_user").on(table.userId),
-]);
-
-export const eventVotesRelations = relations(eventVotes, ({ one }) => ({
-  event: one(events, {
-    fields: [eventVotes.eventId],
-    references: [events.id],
-  }),
-  user: one(users, {
-    fields: [eventVotes.userId],
-    references: [users.id],
-  }),
-}));
-
-export type EventVote = typeof eventVotes.$inferSelect;
 
 // Receipts table - detailed receipts for all transactions
 export const receipts = pgTable("receipts", {

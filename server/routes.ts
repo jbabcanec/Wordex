@@ -14,14 +14,32 @@ function normalizeWord(text: string): string {
   return text.toUpperCase().replace(/\s+/g, '');
 }
 
-// Helper function to calculate trade price with platform spread (IV ± 2%)
-function calculateTradePrice(intrinsicValue: number, isBuy: boolean): number {
-  return isBuy ? intrinsicValue * 1.02 : intrinsicValue * 0.98;
+// Supply/Demand Pricing: Linear bonding curve
+// Price increases as more shares are sold from the pool
+// Formula: basePrice * (1 + 0.5 * sharesOutstanding / totalShares)
+// Price ranges from $1.025 (at 50 shares) to $1.50 (at 1000 shares)
+function calculateCurrentPrice(sharesOutstanding: number, totalShares: number = 1000): number {
+  const basePrice = 1.00;
+  const k = 0.5; // Linear price multiplier
+  const ratio = sharesOutstanding / totalShares;
+  const price = basePrice * (1 + k * ratio);
+  return Math.max(1.00, price); // Minimum $1.00
+}
+
+// Calculate price after a buy/sell transaction
+function calculateNewPrice(currentShares: number, shareDelta: number, totalShares: number = 1000): number {
+  const newShares = currentShares + shareDelta;
+  return calculateCurrentPrice(newShares, totalShares);
 }
 
 // Helper function to calculate fee (0.5%)
 function calculateFee(amount: number): number {
   return amount * 0.005;
+}
+
+// Apply platform spread (2% markup for buys, 2% markdown for sells)
+function applySpread(currentPrice: number, isBuy: boolean): number {
+  return isBuy ? currentPrice * 1.02 : currentPrice * 0.98;
 }
 
 // Helper function to generate receipt data
@@ -350,8 +368,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Calculate prices with locked data
           const userBalance = parseFloat(user.wbBalance);
-          const intrinsicValue = parseFloat(word.intrinsicValue);
-          const pricePerShare = calculateTradePrice(intrinsicValue, true);
+          const currentPrice = parseFloat(word.currentPrice);
+          const pricePerShare = applySpread(currentPrice, true); // Buy at current price + 2% spread
           const subtotal = pricePerShare * quantityNum;
           const fee = calculateFee(subtotal);
           const total = subtotal + fee;
@@ -367,16 +385,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           const newBalance = (userBalance - total).toFixed(2);
           
+          // Calculate new price after buying (price goes UP)
+          const newPrice = calculateNewPrice(word.sharesOutstanding, quantityNum, word.totalShares);
+          
           // Update user balance
           await tx
             .update(users)
             .set({ wbBalance: newBalance, updatedAt: new Date() })
             .where(eq(users.id, userId));
           
-          // Update shares outstanding
+          // Update shares outstanding AND price
           await tx
             .update(words)
-            .set({ sharesOutstanding: word.sharesOutstanding + quantityNum, updatedAt: new Date() })
+            .set({ 
+              sharesOutstanding: word.sharesOutstanding + quantityNum,
+              currentPrice: newPrice.toFixed(2),
+              updatedAt: new Date()
+            })
             .where(eq(words.id, wordId));
           
           // Lock and update or create shareholding
@@ -466,12 +491,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Calculate prices with locked data
           const userBalance = parseFloat(user.wbBalance);
-          const intrinsicValue = parseFloat(word.intrinsicValue);
-          const pricePerShare = calculateTradePrice(intrinsicValue, false);
+          const currentPrice = parseFloat(word.currentPrice);
+          const pricePerShare = applySpread(currentPrice, false); // Sell at current price - 2% spread
           const subtotal = pricePerShare * quantityNum;
           const fee = calculateFee(subtotal);
           const proceeds = subtotal - fee;
           const newBalance = (userBalance + proceeds).toFixed(2);
+          
+          // Calculate new price after selling (price goes DOWN)
+          const newPrice = calculateNewPrice(word.sharesOutstanding, -quantityNum, word.totalShares);
           
           // Update user balance
           await tx
@@ -479,10 +507,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .set({ wbBalance: newBalance, updatedAt: new Date() })
             .where(eq(users.id, userId));
           
-          // Update shares outstanding
+          // Update shares outstanding AND price
           await tx
             .update(words)
-            .set({ sharesOutstanding: word.sharesOutstanding - quantityNum, updatedAt: new Date() })
+            .set({ 
+              sharesOutstanding: word.sharesOutstanding - quantityNum,
+              currentPrice: newPrice.toFixed(2),
+              updatedAt: new Date()
+            })
             .where(eq(words.id, wordId));
           
           // Update or delete shareholding
@@ -568,7 +600,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const enriched = trendingWords.map((word) => ({
         id: word.id,
         textNormalized: word.textNormalized,
-        intrinsicValue: word.intrinsicValue,
+        currentPrice: word.currentPrice,
         change24h: 0, // TODO: Calculate from historical data
       }));
       
@@ -590,7 +622,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const word = await storage.getWord(holding.wordId);
           if (!word) return null;
           
-          const currentValue = parseFloat(word.intrinsicValue) * holding.quantity;
+          const currentValue = parseFloat(word.currentPrice) * holding.quantity;
           const costBasis = parseFloat(holding.costBasis);
           const profitLoss = currentValue - costBasis;
           const profitLossPercent = costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
@@ -599,7 +631,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             word: {
               id: word.id,
               textNormalized: word.textNormalized,
-              intrinsicValue: word.intrinsicValue,
+              currentPrice: word.currentPrice,
             },
             quantity: holding.quantity,
             costBasis: holding.costBasis,
@@ -614,30 +646,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching portfolio:", error);
       res.status(500).json({ message: "Failed to fetch portfolio" });
-    }
-  });
-
-  // Get recent events
-  app.get('/api/events/recent', async (req, res) => {
-    try {
-      const events = await storage.getRecentEvents(20);
-      
-      const enriched = await Promise.all(
-        events.map(async (event) => {
-          const word = await storage.getWord(event.wordId);
-          return {
-            ...event,
-            word: {
-              textNormalized: word?.textNormalized || 'UNKNOWN',
-            },
-          };
-        })
-      );
-      
-      res.json(enriched);
-    } catch (error) {
-      console.error("Error fetching events:", error);
-      res.status(500).json({ message: "Failed to fetch events" });
     }
   });
 

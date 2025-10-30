@@ -25,36 +25,9 @@ export function normalizeWord(text: string): string {
   return text.toUpperCase().replace(/\s+/g, '');
 }
 
-// Calculate intrinsic value with time-weighted momentum decay
-export function calculateIntrinsicValue(
-  baseValue: number,
-  events: Array<{ points: number; createdAt: Date }>
-): number {
-  const now = new Date();
-  let eventValue = 0;
-
-  for (const event of events) {
-    const daysSince = Math.floor((now.getTime() - event.createdAt.getTime()) / (1000 * 60 * 60 * 24));
-    let weight = 0;
-
-    if (daysSince <= 7) {
-      weight = 1.0; // 100%
-    } else if (daysSince <= 30) {
-      weight = 0.5; // 50%
-    } else if (daysSince <= 90) {
-      weight = 0.25; // 25%
-    }
-    // else weight = 0 (90+ days)
-
-    eventValue += event.points * 0.01 * weight;
-  }
-
-  return Math.max(0.10, baseValue + eventValue); // Floor at 0.10 WB
-}
-
-// Calculate buy/sell prices with platform spread
-export function calculateTradePrice(intrinsicValue: number, isBuy: boolean): number {
-  return isBuy ? intrinsicValue * 1.02 : intrinsicValue * 0.98;
+// Calculate buy/sell prices with platform spread (2% markup/markdown)
+export function calculateTradePrice(currentPrice: number, isBuy: boolean): number {
+  return isBuy ? currentPrice * 1.02 : currentPrice * 0.98;
 }
 
 // Calculate trading fee (0.5%)

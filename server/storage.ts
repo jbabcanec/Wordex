@@ -4,8 +4,6 @@ import {
   words,
   shareHoldings,
   transactions,
-  events,
-  eventVotes,
   receipts,
   type User,
   type UpsertUser,
@@ -13,9 +11,6 @@ import {
   type InsertWord,
   type ShareHolding,
   type Transaction,
-  type Event,
-  type InsertEvent,
-  type EventVote,
   type Receipt,
 } from "@shared/schema";
 import { db } from "./db";
@@ -36,7 +31,7 @@ export interface IStorage {
   getWordByNormalizedText(text: string): Promise<Word | undefined>;
   getTopWords(limit: number): Promise<Word[]>;
   getAllWords(): Promise<Word[]>;
-  updateWordIntrinsicValue(id: string, intrinsicValue: string, eventPoints: number): Promise<void>;
+  updateWordPrice(id: string, currentPrice: string): Promise<void>;
   updateWordShares(id: string, sharesOutstanding: number): Promise<void>;
   
   // ShareHolding operations
@@ -49,18 +44,6 @@ export interface IStorage {
   // Transaction operations
   createTransaction(transaction: Omit<typeof transactions.$inferInsert, 'id'>): Promise<Transaction>;
   getUserTransactions(userId: string, limit: number): Promise<Transaction[]>;
-  
-  // Event operations
-  createEvent(event: InsertEvent): Promise<Event>;
-  getEvent(id: string): Promise<Event | undefined>;
-  getRecentEvents(limit: number): Promise<Event[]>;
-  getPendingEvents(): Promise<Event[]>;
-  validateEvent(id: string): Promise<void>;
-  updateEventVotes(id: string, votesFor: number, votesAgainst: number): Promise<void>;
-  
-  // EventVote operations
-  createEventVote(eventId: string, userId: string, vote: boolean): Promise<EventVote>;
-  getUserVoteForEvent(eventId: string, userId: string): Promise<EventVote | undefined>;
   
   // Receipt operations
   createReceipt(transactionId: string, receiptData: any): Promise<Receipt>;
@@ -146,7 +129,7 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(words)
-      .orderBy(desc(words.intrinsicValue))
+      .orderBy(desc(words.currentPrice))
       .limit(limit);
   }
 
@@ -154,10 +137,10 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(words);
   }
 
-  async updateWordIntrinsicValue(id: string, intrinsicValue: string, eventPoints: number): Promise<void> {
+  async updateWordPrice(id: string, currentPrice: string): Promise<void> {
     await db
       .update(words)
-      .set({ intrinsicValue, eventPoints, updatedAt: new Date() })
+      .set({ currentPrice, updatedAt: new Date() })
       .where(eq(words.id, id));
   }
 
@@ -222,69 +205,6 @@ export class DatabaseStorage implements IStorage {
       .where(eq(transactions.userId, userId))
       .orderBy(desc(transactions.createdAt))
       .limit(limit);
-  }
-
-  // Event operations
-  async createEvent(event: InsertEvent): Promise<Event> {
-    const [created] = await db
-      .insert(events)
-      .values({
-        ...event,
-        validationDeadline: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
-      })
-      .returning();
-    return created;
-  }
-
-  async getEvent(id: string): Promise<Event | undefined> {
-    const [event] = await db.select().from(events).where(eq(events.id, id));
-    return event;
-  }
-
-  async getRecentEvents(limit: number): Promise<Event[]> {
-    return await db
-      .select()
-      .from(events)
-      .orderBy(desc(events.createdAt))
-      .limit(limit);
-  }
-
-  async getPendingEvents(): Promise<Event[]> {
-    return await db
-      .select()
-      .from(events)
-      .where(eq(events.validated, false));
-  }
-
-  async validateEvent(id: string): Promise<void> {
-    await db
-      .update(events)
-      .set({ validated: true, validatedAt: new Date() })
-      .where(eq(events.id, id));
-  }
-
-  async updateEventVotes(id: string, votesFor: number, votesAgainst: number): Promise<void> {
-    await db
-      .update(events)
-      .set({ votesFor, votesAgainst })
-      .where(eq(events.id, id));
-  }
-
-  // EventVote operations
-  async createEventVote(eventId: string, userId: string, vote: boolean): Promise<EventVote> {
-    const [created] = await db
-      .insert(eventVotes)
-      .values({ eventId, userId, vote })
-      .returning();
-    return created;
-  }
-
-  async getUserVoteForEvent(eventId: string, userId: string): Promise<EventVote | undefined> {
-    const [vote] = await db
-      .select()
-      .from(eventVotes)
-      .where(and(eq(eventVotes.eventId, eventId), eq(eventVotes.userId, userId)));
-    return vote;
   }
 
   // Receipt operations

@@ -6,7 +6,6 @@ import { StockTicker } from "@/components/StockTicker";
 import { SubmitWordModal } from "@/components/SubmitWordModal";
 import { WelcomeTour, useShouldShowTour } from "@/components/WelcomeTour";
 import { WordCard } from "@/components/WordCard";
-import { EventFeed } from "@/components/EventFeed";
 import { Portfolio } from "@/components/Portfolio";
 import { Leaderboard } from "@/components/Leaderboard";
 import { Button } from "@/components/ui/button";
@@ -247,9 +246,8 @@ export default function Dashboard() {
             <Portfolio />
           </div>
 
-          {/* Right Column - Event Feed & Leaderboard */}
+          {/* Right Column - Leaderboard */}
           <div className="space-y-6">
-            <EventFeed />
             <Leaderboard />
           </div>
         </div>

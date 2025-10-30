@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 interface TickerWord {
   id: string;
   textNormalized: string;
-  intrinsicValue: string;
+  currentPrice: string;
   change24h: number;
 }
 
@@ -44,7 +44,7 @@ export function StockTicker() {
               {word.textNormalized}
             </span>
             <span className="font-mono text-sm">
-              {formatWB(word.intrinsicValue)} WB
+              {formatWB(word.currentPrice)} WB
             </span>
             <span
               className={cn(

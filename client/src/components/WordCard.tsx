@@ -10,7 +10,7 @@ interface WordCardProps {
   word: {
     id: string;
     textNormalized: string;
-    intrinsicValue: string;
+    currentPrice: string;
     sharesOutstanding: number;
     totalShares: number;
     change24h?: number;
@@ -47,7 +47,7 @@ export function WordCard({ word, userBalance, userShares, compact = false }: Wor
             
             <div className="text-right sm:hidden">
               <div className="font-mono font-semibold text-sm">
-                {formatWB(word.intrinsicValue)} WB
+                {formatWB(word.currentPrice)} WB
               </div>
               {word.change24h !== undefined && (
                 <div
@@ -72,7 +72,7 @@ export function WordCard({ word, userBalance, userShares, compact = false }: Wor
           <div className="flex items-center gap-3 sm:gap-4">
             <div className="text-right hidden sm:block">
               <div className="font-mono font-semibold">
-                {formatWB(word.intrinsicValue)} WB
+                {formatWB(word.currentPrice)} WB
               </div>
               {word.change24h !== undefined && (
                 <div
@@ -151,10 +151,10 @@ export function WordCard({ word, userBalance, userShares, compact = false }: Wor
             <div className="flex items-end justify-between">
               <div>
                 <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
-                  Intrinsic Value
+                  Current Price
                 </div>
                 <div className="font-mono font-bold text-3xl">
-                  {formatWB(word.intrinsicValue)} WB
+                  {formatWB(word.currentPrice)} WB
                 </div>
               </div>
 

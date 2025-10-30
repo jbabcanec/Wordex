@@ -8,7 +8,7 @@ interface PortfolioHolding {
   word: {
     id: string;
     textNormalized: string;
-    intrinsicValue: string;
+    currentPrice: string;
   };
   quantity: number;
   costBasis: string;

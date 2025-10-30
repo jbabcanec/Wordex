@@ -2,11 +2,11 @@
 
 ## Overview
 
-WORDEX is a speculative trading platform where users trade shares in words based on their cultural and social power. The platform gamifies language trends through a stock market metaphor, allowing users to buy and sell shares in words, earn dividends from cultural events, and compete on leaderboards.
+WORDEX is a speculative trading platform where users trade shares in individual words using real supply and demand mechanics. The platform features a stock market-style interface where word prices increase when people buy and decrease when people sell, powered by a bonding curve pricing algorithm. Users compete on leaderboards and build portfolios using the virtual WordBucks (WB) currency.
 
 **Tagline**: "Short the patriarchy. Long your vocabulary. Trade the zeitgeist."
 
-The application is built as a full-stack TypeScript application with a React frontend and Express backend, designed to work organically from a single user upward without requiring other traders to function.
+The application is built as a full-stack TypeScript application with a React frontend and Express backend, using username/password authentication and designed to work organically from a single user upward without requiring other traders to function.
 
 ## User Preferences
 
@@ -45,7 +45,6 @@ Preferred communication style: Simple, everyday language.
 - Words (`/api/words/*`)
 - Trading (`/api/trade`)
 - Portfolio (`/api/portfolio`)
-- Events (`/api/events/*`)
 - Leaderboard (`/api/leaderboard`)
 - Receipts (`/api/receipts/*`)
 
@@ -53,9 +52,10 @@ Preferred communication style: Simple, everyday language.
 
 **Key Business Logic**:
 - **Word Normalization**: All words stored in uppercase without spaces for consistent matching
-- **Trading Mechanics**: 2% platform spread (buy at IV × 1.02, sell at IV × 0.98), 0.5% transaction fee
-- **Intrinsic Value Calculation**: Base value of $1.00 plus event-driven value with time-weighted decay (100% weight ≤7 days, 50% ≤30 days, 25% ≤90 days, 0% >90 days)
-- **WordBucks Economy**: Virtual currency system with initial 10,000 WB signup bonus, daily login rewards, and dividend payouts
+- **Trading Mechanics**: 2% platform spread (buy at price × 1.02, sell at price × 0.98), 0.5% transaction fee
+- **Supply/Demand Pricing**: Bonding curve algorithm where price increases with shares sold. Each word starts at 1.00 WB base price with 1,000 total shares. Price formula: `basePrice × (1 + 0.5 × sharesOutstanding / totalShares)`
+- **Word Submission**: Costs 10 WB to submit a word, submitter automatically receives 50 shares (5% of total supply)
+- **WordBucks Economy**: Virtual currency system with initial 10,000 WB signup bonus
 
 ### Database Architecture
 
@@ -63,11 +63,9 @@ Preferred communication style: Simple, everyday language.
 
 **Schema Design**:
 - `users`: User profiles with WB balance tracking and earnings
-- `words`: Submitted words with normalized text, intrinsic value, and share metrics
+- `words`: Submitted words with normalized text, current price (calculated via bonding curve), and share metrics
 - `shareHoldings`: User portfolio positions with cost basis tracking
 - `transactions`: Complete transaction history for receipts and audit trail
-- `events`: Cultural events affecting word values with point-based impact
-- `eventVotes`: Community validation of events
 - `receipts`: Persistent transaction records
 - `sessions`: Session storage for authentication
 
@@ -79,19 +77,19 @@ Preferred communication style: Simple, everyday language.
 
 ### Authentication System
 
-**Provider**: Replit Authentication with OpenID Connect (OIDC).
+**Provider**: Username/password table-based authentication using Passport.js local strategy.
 
-**Implementation**: Passport.js strategy for OIDC with automatic user provisioning on first login.
+**Implementation**: Bcrypt password hashing with automatic user creation on signup. Passwords are never returned in API responses.
 
 **Session Handling**: Secure HTTP-only cookies with 1-week expiration, stored in PostgreSQL.
 
 **Authorization**: Middleware-based authentication checks (`isAuthenticated`) protecting all trading and user-specific endpoints.
 
+**Power User**: Development account (username: `floj`, password: `floj123`) with 999,990 WB balance for testing.
+
 ## External Dependencies
 
 ### Third-Party Services
-
-**Authentication**: Replit OIDC (`process.env.ISSUER_URL`, `process.env.REPL_ID`) for user login and identity management.
 
 **Database**: Neon Serverless PostgreSQL (`process.env.DATABASE_URL`) as the primary data store.
 
@@ -109,7 +107,8 @@ Preferred communication style: Simple, everyday language.
 - `drizzle-orm`: Type-safe ORM
 - `@neondatabase/serverless`: PostgreSQL driver optimized for serverless
 - `passport`: Authentication middleware
-- `openid-client`: OIDC authentication
+- `passport-local`: Username/password authentication strategy
+- `bcryptjs`: Password hashing
 - `express-session`: Session management
 - `connect-pg-simple`: PostgreSQL session store
 
@@ -124,8 +123,6 @@ Preferred communication style: Simple, everyday language.
 **Environment Variables**:
 - `DATABASE_URL`: PostgreSQL connection string (required)
 - `SESSION_SECRET`: Secret for session signing (required)
-- `ISSUER_URL`: OIDC issuer URL (defaults to Replit)
-- `REPL_ID`: Replit application identifier (required in Replit environment)
 - `NODE_ENV`: Environment mode (development/production)
 
 **Font Dependencies**: Google Fonts CDN for Inter, JetBrains Mono, and Space Grotesk typefaces used in the trading interface design system.
