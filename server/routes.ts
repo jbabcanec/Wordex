@@ -6,6 +6,8 @@ import { setupAuth, isAuthenticated } from "./replitAuth";
 import { db } from "./db";
 import { words, users, transactions, receipts, shareHoldings } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
+import bcrypt from "bcryptjs";
+import passport from "passport";
 
 // Helper function to normalize word text: ALL CAPS, NO SPACES
 function normalizeWord(text: string): string {
@@ -43,6 +45,71 @@ function generateReceiptData(transaction: any, word?: any): any {
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   await setupAuth(app);
+
+  // Signup endpoint
+  app.post('/api/signup', async (req, res, next) => {
+    try {
+      const { username, password, email, firstName, lastName } = req.body;
+
+      // Validate required fields
+      if (!username || !password) {
+        return res.status(400).json({ message: "Username and password are required" });
+      }
+
+      if (username.length < 3 || username.length > 50) {
+        return res.status(400).json({ message: "Username must be 3-50 characters" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      // Check if username already exists
+      const [existingUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.username, username))
+        .limit(1);
+
+      if (existingUser) {
+        return res.status(400).json({ message: "Username already taken" });
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Create user
+      const [newUser] = await db
+        .insert(users)
+        .values({
+          username,
+          password: hashedPassword,
+          email: email || null,
+          firstName: firstName || null,
+          lastName: lastName || null,
+        })
+        .returning();
+
+      // Log the user in automatically
+      req.login({
+        claims: {
+          sub: newUser.id,
+          email: newUser.email,
+          first_name: newUser.firstName,
+          last_name: newUser.lastName,
+        },
+        isLocal: true,
+      }, (err) => {
+        if (err) {
+          return res.status(500).json({ message: "Signup successful but login failed" });
+        }
+        res.json({ message: "Signup successful", user: newUser });
+      });
+    } catch (error: any) {
+      console.error("Signup error:", error);
+      res.status(500).json({ message: "Failed to create account" });
+    }
+  });
 
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
