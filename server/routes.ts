@@ -652,48 +652,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get leaderboard (sorted by total portfolio value)
   app.get('/api/leaderboard', async (req, res) => {
     try {
-      // Get all users
+      // Fetch all users with their holdings and word prices in a single efficient query
       const allUsers = await db.select().from(users);
       
-      // Calculate portfolio value for each user
-      const usersWithValue = await Promise.all(
-        allUsers.map(async (user) => {
-          // Get user's holdings
-          const holdings = await db
-            .select()
-            .from(shareHoldings)
-            .where(eq(shareHoldings.userId, user.id));
-          
-          // Calculate total holdings value
-          let holdingsValue = 0;
-          for (const holding of holdings) {
-            const [word] = await db
-              .select()
-              .from(words)
-              .where(eq(words.id, holding.wordId));
-            
-            if (word) {
-              holdingsValue += holding.quantity * parseFloat(word.currentPrice);
-            }
-          }
-          
-          // Total portfolio = cash balance + holdings value
-          const totalValue = parseFloat(user.wbBalance) + holdingsValue;
-          
-          return {
-            ...user,
-            portfolioValue: totalValue.toFixed(2),
-            holdingsValue: holdingsValue.toFixed(2),
-          };
+      // Fetch all holdings with word prices in one join query
+      const holdingsWithPrices = await db
+        .select({
+          userId: shareHoldings.userId,
+          quantity: shareHoldings.quantity,
+          currentPrice: words.currentPrice,
         })
-      );
+        .from(shareHoldings)
+        .leftJoin(words, eq(shareHoldings.wordId, words.id));
       
-      // Sort by portfolio value and add rank
+      // Group holdings by userId and calculate total holdings value
+      const holdingsValueByUser = new Map<string, number>();
+      for (const holding of holdingsWithPrices) {
+        const currentValue = holdingsValueByUser.get(holding.userId) || 0;
+        const holdingValue = holding.quantity * parseFloat(holding.currentPrice || '0');
+        holdingsValueByUser.set(holding.userId, currentValue + holdingValue);
+      }
+      
+      // Calculate portfolio value for each user
+      const usersWithValue = allUsers.map((user) => {
+        const holdingsValue = holdingsValueByUser.get(user.id) || 0;
+        const cashBalance = parseFloat(user.wbBalance);
+        const totalValue = cashBalance + holdingsValue;
+        
+        return {
+          ...user,
+          portfolioValue: totalValue,
+          holdingsValue: holdingsValue,
+        };
+      });
+      
+      // Sort by portfolio value (numeric) and take top 10
       const sorted = usersWithValue
-        .sort((a, b) => parseFloat(b.portfolioValue) - parseFloat(a.portfolioValue))
+        .sort((a, b) => b.portfolioValue - a.portfolioValue)
         .slice(0, 10)
         .map((user, index) => ({
           ...user,
+          portfolioValue: user.portfolioValue.toFixed(2),
+          holdingsValue: user.holdingsValue.toFixed(2),
           rank: index + 1,
         }));
       
