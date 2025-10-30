@@ -9,7 +9,9 @@ interface LeaderboardEntry {
   email: string | null;
   firstName: string | null;
   lastName: string | null;
-  totalEarnings: string;
+  portfolioValue: string;
+  holdingsValue: string;
+  wbBalance: string;
   rank: number;
 }
 
@@ -105,7 +107,10 @@ export function Leaderboard() {
 
               <div className="text-right">
                 <div className="font-mono font-bold">
-                  {formatWB(entry.totalEarnings)} WB
+                  {formatWB(entry.portfolioValue)} WB
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Total Value
                 </div>
                 {entry.rank <= 3 && (
                   <Badge

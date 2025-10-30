@@ -649,11 +649,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get leaderboard
+  // Get leaderboard (sorted by total portfolio value)
   app.get('/api/leaderboard', async (req, res) => {
     try {
-      const topTraders = await storage.getTopTraders(10);
-      res.json(topTraders);
+      // Get all users
+      const allUsers = await db.select().from(users);
+      
+      // Calculate portfolio value for each user
+      const usersWithValue = await Promise.all(
+        allUsers.map(async (user) => {
+          // Get user's holdings
+          const holdings = await db
+            .select()
+            .from(shareHoldings)
+            .where(eq(shareHoldings.userId, user.id));
+          
+          // Calculate total holdings value
+          let holdingsValue = 0;
+          for (const holding of holdings) {
+            const [word] = await db
+              .select()
+              .from(words)
+              .where(eq(words.id, holding.wordId));
+            
+            if (word) {
+              holdingsValue += holding.quantity * parseFloat(word.currentPrice);
+            }
+          }
+          
+          // Total portfolio = cash balance + holdings value
+          const totalValue = parseFloat(user.wbBalance) + holdingsValue;
+          
+          return {
+            ...user,
+            portfolioValue: totalValue.toFixed(2),
+            holdingsValue: holdingsValue.toFixed(2),
+          };
+        })
+      );
+      
+      // Sort by portfolio value and add rank
+      const sorted = usersWithValue
+        .sort((a, b) => parseFloat(b.portfolioValue) - parseFloat(a.portfolioValue))
+        .slice(0, 10)
+        .map((user, index) => ({
+          ...user,
+          rank: index + 1,
+        }));
+      
+      res.json(sorted);
     } catch (error) {
       console.error("Error fetching leaderboard:", error);
       res.status(500).json({ message: "Failed to fetch leaderboard" });
