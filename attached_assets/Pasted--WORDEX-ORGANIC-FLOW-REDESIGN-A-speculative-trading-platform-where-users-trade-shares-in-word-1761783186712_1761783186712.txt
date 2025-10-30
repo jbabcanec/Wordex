@@ -1,0 +1,965 @@
+# **WORDEX: ORGANIC FLOW REDESIGN**
+
+A speculative trading platform where users trade shares in words based on their social/cultural power. Designed to work organically from a single user upward.
+
+**Tagline**: "Short the patriarchy. Long your vocabulary. Trade the zeitgeist."
+
+---
+
+## **I. THE SINGLE-USER CORE MECHANIC**
+
+### **Scenario: You, One Word, No Other Traders**
+
+**What You Can Do:**
+1. **Submit a word** ("Cunt") - costs 10 WB (WordBucks)
+2. **Platform offers initial shares** - 1,000 shares at $1.00 each
+3. **You buy 100 shares** - costs 100 WB
+4. **Event happens** - "Cunt" used in major news headline
+5. **Dividend pays out** - you receive 0.50 WB per share = 50 WB profit
+6. **Your shares now worth more** - intrinsic value increased due to event
+
+**No other traders needed.** The word has value, events happen, you profit. Market works.
+
+---
+
+## **II. ORGANIC MONEY SYSTEM: "WORDBUCKS" (WB)**
+
+### **Properties:**
+
+**Persistent & Tracked:**
+- Every transaction stored permanently
+- Full receipt history (like bank statements)
+- Can view all-time earnings, losses, trades
+- Leaderboards track total WB accumulated
+- Cannot be deleted or hidden
+
+**Fake But Feels Real:**
+- Cannot withdraw to USD
+- ONE-WAY optional purchase: $1 USD → 1,000 WB (if you want to buy in)
+- But primary way to earn is through platform activity
+- Scarce within platform economy (not infinite)
+
+**How You Earn WB (Without Spending Real Money):**
+
+1. **Sign-up bonus:** 10,000 WB free
+2. **Daily login:** 100 WB
+3. **Submit word that succeeds:** 5% of first-week trading volume
+4. **Accurate event reporting:** 100 WB per validated event
+5. **Dividends from holdings:** Unlimited earning potential
+6. **Referrals:** 500 WB per friend who joins
+7. **Tournaments/challenges:** Prize pools
+8. **Content creation:** Write analysis, earn tips from users
+
+**Receipt System:**
+Every action generates a receipt you can view/download:
+
+```
+WORDEX RECEIPT #847392
+Date: 2025-10-29 14:32:17 UTC
+Action: BUY
+Word: CUNT
+Quantity: 100 shares
+Price per share: 12.50 WB
+Total cost: 1,250 WB
+Fee (0.5%): 6.25 WB
+Balance before: 15,384.50 WB
+Balance after: 14,128.25 WB
+Transaction ID: 0x7f3b2a9c...
+```
+
+All receipts archived forever in your account history.
+
+---
+
+## **III. ORGANIC PRICE DISCOVERY**
+
+Instead of pure supply/demand (requires many traders), use **hybrid model:**
+
+### **Intrinsic Value Formula**
+
+Every word has a base **Intrinsic Value (IV)** that updates with events:
+
+```
+Intrinsic Value = Base Value + Event Value + Momentum Value
+```
+
+**Base Value:** 
+- All words start at 1.00 WB
+- Floor price (can't go below 0.10 WB)
+
+**Event Value:**
+- Each power event adds points
+- 1 point = 0.01 WB
+- Example: 500-point event adds 5.00 WB to intrinsic value
+- Decays 1% per day without new events (prevents infinite growth)
+
+**Momentum Value:**
+- Recent events worth more than old ones
+- Last 7 days: 100% weight
+- 8-30 days: 50% weight  
+- 31-90 days: 25% weight
+- 90+ days: 0% weight
+
+**Example:**
+- "Fuck" base value: 1.00 WB
+- Had 750-point event 5 days ago: +7.50 WB
+- Had 200-point event 20 days ago: +1.00 WB (50% weight)
+- **Current Intrinsic Value: 9.50 WB**
+
+### **Market Price vs Intrinsic Value**
+
+**With 1 User (You Alone):**
+- Platform acts as market maker
+- You buy/sell at Intrinsic Value ± 2% (small spread for platform fee)
+- Buy price: IV × 1.02
+- Sell price: IV × 0.98
+
+**With Multiple Users:**
+- Order book appears (users trade with each other)
+- Market price can diverge from IV (speculation!)
+- If market price > IV: Word is "overvalued" (risky)
+- If market price < IV: Word is "undervalued" (opportunity)
+- Arbitrage opportunities emerge naturally
+
+**This means:**
+- System works perfectly with 1 user (trade with platform)
+- Scales organically as users join (trade with each other)
+- Price discovery happens naturally without complex algorithms
+
+---
+
+## **IV. SIMPLIFIED WORD LIFECYCLE**
+
+### **Phase 1: Word Birth (Works With 1 User)**
+
+1. **Submission**
+   - You type "Blastoise"
+   - Costs 10 WB to submit
+   - AI checks: Not duplicate, is a valid word/name
+   - Instantly listed (no auction needed for organic flow)
+
+2. **Initial Offering**
+   - Platform creates 1,000 shares
+   - Offers at 1.00 WB each
+   - Anyone can buy (including submitter)
+   - Unsold shares held by platform reserve
+
+3. **You're the Only Buyer**
+   - You buy 50 shares for 50 WB
+   - Platform holds remaining 950 shares
+   - Word is now "live" on market
+
+### **Phase 2: Event Happens (No Other Users Needed)**
+
+4. **Power Event Detected**
+   - News: "Nintendo announces Blastoise movie"
+   - System awards 350 points
+   - Intrinsic Value increases: 1.00 + 3.50 = 4.50 WB
+
+5. **Dividend Payment**
+   - Dividend pool: 350 points × 0.01 = 3.50 WB total
+   - Per share: 3.50 / 1,000 shares = 0.0035 WB
+   - You own 50 shares: 50 × 0.0035 = 0.175 WB dividend
+   - **Instant payment to your balance**
+   - Receipt generated automatically
+
+6. **Your Position**
+   - Cost basis: 50 shares @ 1.00 = 50 WB
+   - Current value: 50 shares @ 4.50 = 225 WB
+   - Dividends received: 0.175 WB
+   - **Total profit: 175.175 WB**
+   - Can sell back to platform anytime at 4.50 × 0.98 = 4.41 WB
+
+### **Phase 3: Another User Joins (Organic Growth)**
+
+7. **Second User Appears**
+   - Sees "Blastoise" at 4.50 WB
+   - Thinks it's overvalued, won't buy
+   - OR thinks Pokemon has momentum, buys 100 shares
+
+8. **Order Book Emerges**
+   - User A (you): "Sell 25 @ 5.00 WB" (limit order)
+   - User B: "Buy 100 @ 4.40 WB" (limit order)
+   - Platform still provides liquidity at IV ± 2%
+   - First match: User B can buy from you if you lower to 4.40
+   - OR buy from platform at 4.59 WB
+
+9. **Market Price Diverges**
+   - High demand → market price rises above IV
+   - Low demand → market price falls below IV
+   - Creates natural speculation and trading
+   - But IV always provides "fair value" anchor
+
+---
+
+## **V. SUPER SIMPLE EVENT SYSTEM**
+
+### **Automated Detection (Background Process)**
+
+**Every 15 Minutes:**
+1. Check NewsAPI for mentions of all listed words
+2. Score each mention:
+   - Headline: 10 points
+   - Article body: 1 point
+   - Source weight: NYT × 5, Random Blog × 1
+3. Check Twitter API for trending
+   - Top 10 trending: 50 points
+   - High velocity: 10 points per 10k tweets/hour
+4. Check Google Trends
+   - Spike above baseline: Points = (spike_size × 100)
+
+**Manual Events (User-Submitted):**
+- User says: "Trump just said 'Witch Hunt' 47 times in rally"
+- Attaches video link + timestamp
+- 3 random users vote to validate (24 hour window)
+- If 2/3 approve: Event confirmed, points awarded
+- Reporter gets 10% of dividend pool as reward
+
+### **Event Point Tiers (Simplified)**
+
+- **Tier 5:** 1-25 points (minor mentions, small trends)
+- **Tier 4:** 26-100 points (viral moment, regional news)
+- **Tier 3:** 101-500 points (major news, national trend)
+- **Tier 2:** 501-1,000 points (government use, international news)
+- **Tier 1:** 1,000+ points (historic moments, civilization-level)
+
+**Automatic Dividend Payment:**
+- Event confirmed → points converted to WB (1 point = 0.01 WB)
+- Divided by total shares (1,000)
+- Paid to all shareholders proportionally
+- Receipt auto-generated
+
+---
+
+## **VI. MINIMAL UI FOR ORGANIC START**
+
+### **Homepage (Single Screen)**
+
+```
+═══════════════════════════════════════════
+              WORDEX
+      Trade the Power of Language
+═══════════════════════════════════════════
+
+Your Balance: 10,000 WB
+
+┌─────────────────────────────────────────┐
+│ SUBMIT A WORD                     -10 WB│
+│ [________________] [SUBMIT]              │
+└─────────────────────────────────────────┘
+
+TOP POWER WORDS (by Intrinsic Value)
+─────────────────────────────────────────
+1. FUCK............. 47.23 WB  [BUY] [SELL]
+2. TRUMP............ 41.89 WB  [BUY] [SELL]
+3. GENOCIDE......... 38.54 WB  [BUY] [SELL]
+4. AI............... 22.17 WB  [BUY] [SELL]
+5. BLASTOISE........ 4.50 WB   [BUY] [SELL]
+
+YOUR PORTFOLIO
+─────────────────────────────────────────
+BLASTOISE........... 50 shares (225 WB)
+                     +175.18 WB (+350%)
+
+RECENT EVENTS
+─────────────────────────────────────────
+🔥 BLASTOISE +350pts: Nintendo movie announced
+💬 FUCK +89pts: Trending on Twitter
+📰 GENOCIDE +1250pts: Used in UN resolution
+
+[VIEW ALL WORDS] [LEADERBOARD] [SETTINGS]
+```
+
+**That's It.** One screen. Everything you need.
+
+### **Click "BUY" → Simple Modal**
+
+```
+┌──────────────────────────────────┐
+│   BUY: BLASTOISE                  │
+│                                   │
+│   Current Price: 4.59 WB         │
+│   Your Balance: 10,000 WB        │
+│                                   │
+│   Quantity: [____] shares        │
+│                                   │
+│   Total Cost: _____ WB           │
+│   Fee (0.5%): _____ WB           │
+│                                   │
+│   [CONFIRM PURCHASE] [CANCEL]    │
+└──────────────────────────────────┘
+```
+
+**Click "SELL" → Same Simple Modal**
+
+Auto-generates receipt on completion.
+
+---
+
+## **VII. ORGANIC SCALING**
+
+### **1 User → 10 Users**
+
+- Platform still market maker for most words
+- Users might start trading popular words with each other
+- Order book shows both platform and user orders
+- Natural price discovery begins
+
+### **10 Users → 100 Users**
+
+- Order books get thicker
+- Platform reduces market making (only fills gaps)
+- Users prefer trading with each other (tighter spreads)
+- Speculation emerges (buy low, sell high)
+
+### **100 Users → 1,000 Users**
+
+- Most words have active markets
+- Platform rarely needed as market maker
+- Advanced features unlock:
+  - Limit orders standard
+  - Stop losses common
+  - Portfolio analytics requested
+  - Social features wanted (following traders)
+
+### **1,000+ Users**
+
+- Full feature set (from original design doc)
+- But core mechanics unchanged
+- Still works same as day 1 with 1 user
+
+**The beauty:** System is identical at all scales. Just more liquidity.
+
+---
+
+## **VIII. MINIMAL PYTHON IMPLEMENTATION**
+
+Let's build the absolute core:
+
+### **Architecture**
+
+```
+wordex/
+├── models.py          # User, Word, Share, Event, Transaction
+├── engine.py          # Trading engine (buy/sell/dividend logic)
+├── events.py          # Event detection & validation
+├── market_maker.py    # Platform liquidity provider
+├── receipts.py        # Receipt generation
+└── main.py           # CLI interface for testing
+```
+
+### **Core Classes**
+
+```python
+class User:
+    - id
+    - username
+    - balance (WB)
+    - shares: {word_id: quantity}
+    - transaction_history: [receipts]
+
+class Word:
+    - id
+    - text
+    - base_value (always 1.00)
+    - event_points (cumulative)
+    - intrinsic_value (calculated)
+    - total_shares (fixed at 1,000)
+    - shares_outstanding (in circulation)
+
+class Event:
+    - id
+    - word_id
+    - points
+    - description
+    - timestamp
+    - validated (bool)
+
+class Transaction:
+    - id
+    - buyer/seller
+    - word_id
+    - quantity
+    - price
+    - fee
+    - receipt_id
+```
+
+### **Core Functions**
+
+```python
+def calculate_intrinsic_value(word):
+    """
+    IV = base + (recent_event_points × 0.01)
+    with time decay
+    """
+
+def execute_trade(user, word, quantity, side):
+    """
+    Buy: user.balance -= cost
+         user.shares[word] += quantity
+    Sell: opposite
+    Generate receipt
+    """
+
+def distribute_dividend(word, event):
+    """
+    Total pool = event.points × 0.01 WB
+    Per share = pool / word.total_shares
+    For each holder:
+        dividend = shares_owned × per_share
+        user.balance += dividend
+        generate receipt
+    """
+
+def detect_events():
+    """
+    Background job:
+    - Check NewsAPI every 15 min
+    - Auto-create events
+    - Trigger dividend distribution
+    """
+```
+
+---
+
+## **IX. TEST SCENARIOS**
+
+### **Test 1: Single User, Single Word**
+
+```python
+# Setup
+user = User("Alice", balance=10000)
+word = Word("Cunt")
+
+# Alice submits word
+user.balance -= 10  # submission fee
+word.list()
+
+# Alice buys 100 shares
+transaction = buy(user, word, quantity=100, price=1.00)
+# Alice balance: 10000 - 10 - 100 = 9890
+# Alice shares: {Cunt: 100}
+
+# Event happens
+event = Event(word, points=750, description="Used in major speech")
+distribute_dividend(word, event)
+# Dividend pool: 750 × 0.01 = 7.50 WB
+# Per share: 7.50 / 1000 = 0.0075 WB
+# Alice gets: 100 × 0.0075 = 0.75 WB
+# Alice balance: 9890 + 0.75 = 9890.75
+
+# Word intrinsic value updates
+word.intrinsic_value = 1.00 + 7.50 = 8.50 WB
+
+# Alice sells 50 shares back to platform
+transaction = sell(user, word, quantity=50, price=8.50)
+# Alice receives: 50 × 8.50 × 0.98 = 416.50 WB
+# Alice balance: 9890.75 + 416.50 = 10307.25
+
+# Final state
+print(f"Net profit: {10307.25 - 10000} = 307.25 WB")
+print(f"ROI: {307.25 / 100} = 307% on 100 WB investment")
+```
+
+**Works perfectly with 1 user.**
+
+### **Test 2: Two Users, Order Matching**
+
+```python
+# Setup
+alice = User("Alice", balance=10000)
+bob = User("Bob", balance=10000)
+word = Word("Blastoise", intrinsic_value=5.00)
+
+# Alice places sell order
+alice_order = LimitOrder(alice, word, side="SELL", quantity=50, price=5.50)
+
+# Bob places buy order
+bob_order = LimitOrder(bob, word, side="BUY", quantity=50, price=5.50)
+
+# Orders match!
+execute_match(alice_order, bob_order)
+# Alice: -50 shares, +275 WB (50 × 5.50)
+# Bob: +50 shares, -275 WB
+
+# Platform takes 0.5% fee from both
+# Fee = 275 × 0.005 = 1.375 WB each
+```
+
+**Works with 2+ users.**
+
+### **Test 3: Event Detection & Auto-Dividend**
+
+```python
+# Background task runs
+events = scan_news_api()
+# Found: "Nintendo announces Blastoise movie" in IGN headline
+
+# Create event
+event = Event(
+    word=Word.get("Blastoise"),
+    points=350,
+    description="Nintendo movie announcement",
+    source="https://ign.com/..."
+)
+
+# Auto-distribute
+distribute_dividend(Word.get("Blastoise"), event)
+
+# All Blastoise holders get paid instantly
+# Receipts generated for everyone
+```
+
+**Works automatically.**
+
+---
+
+## **X. LAUNCH PLAN (ULTRA MINIMAL)**
+
+### **Week 1: Solo Testing**
+
+- You alone on platform
+- Submit 10 words manually
+- Simulate events by hand
+- Test all buy/sell/dividend mechanics
+- Verify receipt system
+
+### **Week 2: Friends & Family (10 users)**
+
+- Invite 10 friends
+- Give everyone 10,000 WB
+- Seed 50 words (curated list)
+- Manual event posting (you approve)
+- Gather feedback
+
+### **Week 3: Small Beta (100 users)**
+
+- Open to Twitter followers / Reddit post
+- Auto-event detection turned on (basic)
+- Simple web interface (one page)
+- Track daily active users
+- Monitor for bugs
+
+### **Month 2: Public Launch**
+
+- If engagement is strong, keep growing
+- If weak, pivot based on feedback
+- But core mechanics stay same
+
+---
+
+## **XI. COMPLETE ADVANCED MECHANICS (FROM ORIGINAL DESIGN)**
+
+When the platform scales, these features unlock organically:
+
+### **A. Word Sectors (Market Categorization)**
+
+Words automatically tagged by AI into sectors:
+
+1. **Politics** (Trump, Democracy, Fascism)
+2. **Profanity** (Fuck, Cunt, Shit)
+3. **Social Movements** (Feminism, BLM, MeToo)
+4. **Technology** (AI, Blockchain, Algorithm)
+5. **Pop Culture** (Brat, Rizz, Bussin)
+6. **Violence** (War, Murder, Genocide)
+7. **Identity** (Gay, Trans, Queer)
+8. **Economics** (Inflation, Recession, Poverty)
+9. **Gaming/Nerd** (Blastoise, Dragonborn, Pwn)
+10. **Existential** (Death, God, Love, Apocalypse)
+
+**Sector Indices:**
+- Average performance of top 20 words in sector
+- Users can see "Politics up 12% this week"
+- Sector correlation analysis (do politics words move together?)
+
+**Sector ETFs (Phase 2):**
+- Buy "Politics Basket" - owns equal shares of top 10 political words
+- Diversification without picking individual words
+- 0.8% annual management fee
+
+### **B. The Power Index**
+
+Real-time ranking of word strength (0-100 scale):
+
+```
+Power Index = 
+  (Market Activity × 0.25) +
+  (Event Frequency × 0.30) +
+  (Event Magnitude × 0.25) +
+  (Volatility × 0.10) +
+  (Cultural Momentum × 0.10)
+```
+
+**Component Breakdowns:**
+
+**1. Market Activity (0-100)**
+- Trading volume last 7 days vs. platform average
+- Number of unique traders
+- Bid/ask spread (tight spread = confidence)
+
+**2. Event Frequency (0-100)**
+- Number of power events last 30 days
+- Weighted by recency (yesterday counts more than 29 days ago)
+
+**3. Event Magnitude (0-100)**
+- Total points from events last 30 days
+- Normalized against highest-scoring word
+
+**4. Volatility (0-100)**
+- Price swings indicate cultural relevance
+- Sweet spot: 15-30% daily movement
+
+**5. Cultural Momentum (0-100)**
+- Is power growing or declining?
+- Compare last 7 days to previous 7 days
+
+### **C. Shorting & Derivatives (Advanced)**
+
+**Short Selling (Phase 2):**
+- Borrow shares from other users (automated matching)
+- Sell them, hoping to buy back cheaper
+- Pay interest to lender (1% daily)
+- Forced liquidation if price rises 50%
+
+**Options (Phase 3):**
+- **Call Option**: Right to buy word at set price by set date
+- **Put Option**: Right to sell word at set price
+- Bet on timing of events
+
+### **D. Decay Mechanism**
+
+Words that don't demonstrate power lose value:
+
+**Daily Decay Rate:**
+- No events in 7 days: -0.1% per day
+- No events in 30 days: -0.5% per day
+- No events in 90 days: -1.0% per day
+- No events in 180 days: -2.0% per day
+
+**Decay Protection:**
+- Any power event resets decay clock
+- Words under $0.50 can't decay below $0.10
+
+### **E. Circuit Breakers**
+
+- Trading halted if price moves >50% in 5 minutes
+- 15-minute cooling off period
+- Prevents flash crashes and manipulation
+
+---
+
+## **XII. MONETIZATION**
+
+### **Revenue Streams**
+
+**1. Trading Fees (Primary)**
+- 0.5% per trade
+- Scales with volume
+
+**2. Listing Fees**
+- 10 WB per word submission
+- Anti-spam measure + revenue
+
+**3. Premium Subscriptions ($9.99/month)**
+- Real-time advanced analytics
+- API access (build trading bots)
+- Lower trading fees (0.2%)
+- Priority customer support
+
+**4. Optional WordBucks Purchase**
+- $1 USD = 1,000 WB (one-way)
+- Not required, but accelerates gameplay
+
+**5. Data Sales**
+- Anonymized trading data to researchers
+- Cultural forecasting reports to brands
+
+**6. Tournament Entry Fees**
+- Weekly competitions: $5 entry, winner take all
+- 10% rake for platform
+
+---
+
+## **XIII. ANTI-MANIPULATION & FAIRNESS**
+
+### **Manipulation Vectors & Defenses**
+
+**1. Pump & Dump Schemes**
+- *Attack*: Coordinated buy to spike price, then dump
+- *Defense*:
+  - Max 5% per order (can't whale buy)
+  - Wash trading detection
+  - Volume spike alerts
+  - User reputation system
+
+**2. Insider Trading**
+- *Attack*: You know politician will say word tomorrow
+- *Defense*:
+  - Trading paused before scheduled events
+  - Community reporting
+  - Pattern detection algorithms
+
+**3. Fake Event Reporting**
+- *Attack*: Submit fake news to trigger dividends
+- *Defense*:
+  - Multi-source verification
+  - Human validation layer
+  - Trusted domain whitelist
+  - Permanent ban for false reports
+
+**4. Front-Running**
+- *Attack*: See large order coming, trade ahead
+- *Defense*:
+  - Order batching (all orders in 5-sec window execute together)
+  - Fair sequencing protocol
+
+### **Reputation System**
+
+Users earn reputation via:
+- Accurate event reporting (+10 rep)
+- Providing liquidity (+1 rep per day)
+- No violations (+5 rep per month)
+
+High reputation users:
+- Influence governance votes
+- Get fee discounts
+- Access advanced features first
+
+---
+
+## **XIV. CONTENT MODERATION & ETHICS**
+
+### **The Offensive Word Problem**
+
+This platform will have slurs, offensive terms, and harmful language.
+
+**Recommended Approach: Age-Gated Tiers**
+
+- **"Family" mode**: Only G-rated words visible
+- **"Adult" mode**: Profanity allowed
+- **"Uncensored" mode**: Everything legal (18+ verification)
+- Users choose their experience level
+
+**Educational Framing:**
+- "This platform studies cultural power, not morality"
+- "Offensive words having value doesn't mean we approve"
+- "Think of it as sociological research via markets"
+
+**We Do NOT Want:**
+- Hate groups organizing
+- Brigading to pump hate speech
+- Harassment campaigns
+
+**Safeguards:**
+- Words used for harassment can be delisted
+- Users banned for coordinated hate
+- Partnership with anti-hate organizations
+- Clear Terms of Service
+
+---
+
+## **XV. SOCIAL & VIRAL MECHANICS**
+
+### **Shareable Content**
+
+- "I made 5,000 WB on 'Cunt' this week" → auto-generates share image
+- Portfolio flex posts ("My top 5 words")
+- Prediction market: "I say 'Rizz' crashes by December"
+
+### **Referral Program**
+
+- Invite friend: Both get 500 WB bonus
+- If they trade 10k volume: You get 100 WB more
+- Leaderboard for most referrals
+
+### **Tournaments**
+
+- "Beat the AI" - compete against ML bot
+- Sector showdowns: Best politics trader
+- Weekly challenges with prizes
+
+### **Media Hooks**
+
+- Track controversial words
+- Publish "Most Powerful Word of 2025" annually
+- Partner with linguists
+- PR stunts around cultural moments
+
+---
+
+## **XVI. TECHNICAL STACK**
+
+### **Backend**
+- **Language**: Python 3.11+
+- **Framework**: FastAPI (high performance, async)
+- **Database**: PostgreSQL (relational data)
+- **Cache**: Redis (real-time prices, sessions)
+- **Task Queue**: Celery (background event detection)
+- **Message Broker**: RabbitMQ or Redis
+
+### **Frontend**
+- **Web**: React.js + TypeScript
+- **Mobile**: React Native (iOS/Android)
+- **Real-time**: WebSockets (Socket.io)
+- **Charts**: Recharts or Chart.js
+
+### **Infrastructure**
+- **Hosting**: AWS or DigitalOcean
+- **CDN**: CloudFlare
+- **Monitoring**: Sentry + DataDog
+- **CI/CD**: GitHub Actions
+
+### **APIs & Data**
+- **News**: NewsAPI, GDELT
+- **Social**: Twitter API (now X API)
+- **Trends**: Google Trends API (via Pytrends)
+- **NLP**: OpenAI GPT-4 API (event analysis)
+
+### **Database Schema (Core Tables)**
+
+```sql
+-- Users
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    balance DECIMAL(12,2) DEFAULT 10000.00,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Words
+CREATE TABLE words (
+    id SERIAL PRIMARY KEY,
+    text VARCHAR(100) UNIQUE NOT NULL,
+    sector VARCHAR(50),
+    base_value DECIMAL(10,2) DEFAULT 1.00,
+    intrinsic_value DECIMAL(10,2) DEFAULT 1.00,
+    total_shares INTEGER DEFAULT 1000,
+    listed_at TIMESTAMP DEFAULT NOW(),
+    submitter_id INTEGER REFERENCES users(id)
+);
+
+-- Holdings
+CREATE TABLE holdings (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    word_id INTEGER REFERENCES words(id),
+    quantity INTEGER NOT NULL,
+    avg_cost DECIMAL(10,2),
+    UNIQUE(user_id, word_id)
+);
+
+-- Transactions
+CREATE TABLE transactions (
+    id SERIAL PRIMARY KEY,
+    buyer_id INTEGER REFERENCES users(id),
+    seller_id INTEGER REFERENCES users(id),
+    word_id INTEGER REFERENCES words(id),
+    quantity INTEGER NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    fee DECIMAL(10,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Events
+CREATE TABLE events (
+    id SERIAL PRIMARY KEY,
+    word_id INTEGER REFERENCES words(id),
+    points INTEGER NOT NULL,
+    description TEXT,
+    source_url TEXT,
+    validated BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Dividends
+CREATE TABLE dividends (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    word_id INTEGER REFERENCES words(id),
+    event_id INTEGER REFERENCES events(id),
+    amount DECIMAL(10,2) NOT NULL,
+    paid_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## **XVII. PERFORMANCE TARGETS**
+
+### **Latency**
+- Order execution: <100ms
+- Price updates: <1s
+- Page load: <2s
+- Event detection: <15 minutes
+
+### **Scalability**
+- Support 100,000+ concurrent users
+- Handle 10,000 trades per second
+- Store 1M+ words eventually
+- 99.9% uptime SLA
+
+### **Database Optimization**
+- Indexing on frequently queried fields
+- Connection pooling
+- Query optimization
+- Caching hot data in Redis
+
+---
+
+## **XVIII. KEY IMPLEMENTATION DECISIONS**
+
+### **Questions to Answer Before Coding:**
+
+1. **Play money or real money initially?**
+   - **Recommended**: Play money (WB only)
+   - Reason: Avoid regulatory complexity
+
+2. **Web-only or mobile too?**
+   - **Recommended**: Web first, mobile later
+   - Reason: Faster iteration
+
+3. **Event validation: automated or human?**
+   - **Recommended**: Hybrid (automated + spot-check)
+   - Reason: Balance accuracy and scalability
+
+4. **Initial word pool size?**
+   - **Recommended**: 50-100 curated words
+   - Reason: Quality over quantity at launch
+
+5. **Blockchain or traditional database?**
+   - **Recommended**: Traditional (PostgreSQL)
+   - Reason: Faster, cheaper, easier
+
+6. **Launch timeline?**
+   - **Recommended**: 3-4 months to MVP
+   - Month 1: Core engine
+   - Month 2: Basic UI
+   - Month 3: Event system
+   - Month 4: Testing + polish
+
+---
+
+## **XIX. READY TO BUILD**
+
+This design is:
+✅ Works with 1 user from day 1
+✅ Scales organically to thousands
+✅ Simple persistent money with receipts
+✅ No complex features until proven
+✅ Can build MVP in weeks
+
+### **Next Steps:**
+
+1. **Build core models** (`models.py`)
+2. **Implement trading engine** (`engine.py`)
+3. **Create receipt system** (`receipts.py`)
+4. **Test with simulations** (`tests/`)
+5. **Build simple CLI** (`main.py`)
+6. **Add event detection** (`events.py`)
+7. **Create web UI** (React)
+8. **Deploy beta version**
+
+**Let's start coding!**
