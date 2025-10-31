@@ -1,20 +1,24 @@
-// Database storage implementation - see blueprints javascript_log_in_with_replit and javascript_database
+// Database storage implementation - Order Book Trading System
 import {
   users,
   words,
-  shareHoldings,
+  holdings,
+  orders,
+  trades,
+  vestingSchedules,
   transactions,
-  receipts,
   type User,
   type UpsertUser,
   type Word,
   type InsertWord,
-  type ShareHolding,
+  type Holding,
+  type Order,
+  type Trade,
+  type VestingSchedule,
   type Transaction,
-  type Receipt,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, or, asc, gte, lte } from "drizzle-orm";
 
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
@@ -24,30 +28,93 @@ export interface IStorage {
   updateUserLogin(userId: string): Promise<void>;
   updateUserEarnings(userId: string, earnings: string): Promise<void>;
   getTopTraders(limit: number): Promise<Array<User & { rank: number }>>;
+  getAllTraders(offset: number, limit: number): Promise<User[]>;
   
   // Word operations
   createWord(word: InsertWord): Promise<Word>;
   getWord(id: string): Promise<Word | undefined>;
   getWordByNormalizedText(text: string): Promise<Word | undefined>;
   getTopWords(limit: number): Promise<Word[]>;
-  getAllWords(): Promise<Word[]>;
-  updateWordPrice(id: string, currentPrice: string): Promise<void>;
-  updateWordShares(id: string, sharesOutstanding: number): Promise<void>;
+  getAllWords(offset: number, limit: number): Promise<Word[]>;
+  getActiveIpos(): Promise<Word[]>;
+  updateWordPrice(id: string, currentPrice: string, lastTradePrice?: string): Promise<void>;
+  updateWordShares(id: string, outstandingShares: number): Promise<void>;
+  updateWordIpoStatus(id: string, ipoStatus: string): Promise<void>;
+  updateWordIpoPrice(id: string, ipoCurrentPrice: string): Promise<void>;
+  updateWordIpoSharesSold(id: string, ipoSharesSold: number): Promise<void>;
+  updateWordStats(id: string, stats: { volume24h?: number; tradeCount?: number; marketCap?: string }): Promise<void>;
   
-  // ShareHolding operations
-  getShareHolding(userId: string, wordId: string): Promise<ShareHolding | undefined>;
-  createShareHolding(userId: string, wordId: string, quantity: number, costBasis: string): Promise<ShareHolding>;
-  updateShareHolding(id: string, quantity: number, costBasis: string): Promise<void>;
-  getUserPortfolio(userId: string): Promise<ShareHolding[]>;
-  getWordHolders(wordId: string): Promise<ShareHolding[]>;
+  // Holding operations
+  getHolding(userId: string, wordId: string): Promise<Holding | undefined>;
+  createHolding(data: {
+    userId: string;
+    wordId: string;
+    quantity: number;
+    availableQuantity: number;
+    lockedQuantity: number;
+    averageCost: string;
+  }): Promise<Holding>;
+  updateHolding(id: string, data: {
+    quantity?: number;
+    availableQuantity?: number;
+    lockedQuantity?: number;
+    averageCost?: string;
+  }): Promise<void>;
+  getUserPortfolio(userId: string): Promise<Holding[]>;
+  getWordHolders(wordId: string): Promise<Holding[]>;
+  
+  // Order operations
+  createOrder(data: {
+    userId: string;
+    wordId: string;
+    side: string;
+    orderType: string;
+    quantity: number;
+    remainingQuantity: number;
+    limitPrice?: string;
+  }): Promise<Order>;
+  getOrder(id: string): Promise<Order | undefined>;
+  getUserOrders(userId: string, status?: string): Promise<Order[]>;
+  getWordOrders(wordId: string, side?: string, status?: string): Promise<Order[]>;
+  getOpenOrders(wordId: string, side: string): Promise<Order[]>;
+  updateOrder(id: string, data: {
+    filledQuantity?: number;
+    remainingQuantity?: number;
+    status?: string;
+  }): Promise<void>;
+  cancelOrder(id: string): Promise<void>;
+  
+  // Trade operations
+  createTrade(data: {
+    wordId: string;
+    buyerId: string;
+    sellerId: string;
+    buyOrderId?: string;
+    sellOrderId?: string;
+    quantity: number;
+    price: string;
+    totalValue: string;
+    buyerFee: string;
+    sellerFee: string;
+    isIpo: boolean;
+  }): Promise<Trade>;
+  getWordTrades(wordId: string, limit: number): Promise<Trade[]>;
+  getUserTrades(userId: string, limit: number): Promise<Trade[]>;
+  
+  // Vesting operations
+  createVestingSchedule(data: {
+    userId: string;
+    wordId: string;
+    totalShares: number;
+    schedule: any;
+  }): Promise<VestingSchedule>;
+  getVestingSchedule(userId: string, wordId: string): Promise<VestingSchedule | undefined>;
+  getAllVestingSchedules(): Promise<VestingSchedule[]>;
+  updateVestingSchedule(id: string, unlockedShares: number): Promise<void>;
   
   // Transaction operations
   createTransaction(transaction: Omit<typeof transactions.$inferInsert, 'id'>): Promise<Transaction>;
   getUserTransactions(userId: string, limit: number): Promise<Transaction[]>;
-  
-  // Receipt operations
-  createReceipt(transactionId: string, receiptData: any): Promise<Receipt>;
-  getReceipt(transactionId: string): Promise<Receipt | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -106,6 +173,15 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  async getAllTraders(offset: number, limit: number): Promise<User[]> {
+    return await db
+      .select()
+      .from(users)
+      .orderBy(desc(users.wbBalance))
+      .offset(offset)
+      .limit(limit);
+  }
+
   // Word operations
   async createWord(word: InsertWord): Promise<Word> {
     const [created] = await db
@@ -129,64 +205,275 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(words)
-      .orderBy(desc(words.currentPrice))
+      .orderBy(desc(words.marketCap))
       .limit(limit);
   }
 
-  async getAllWords(): Promise<Word[]> {
-    return await db.select().from(words);
+  async getAllWords(offset: number, limit: number): Promise<Word[]> {
+    return await db
+      .select()
+      .from(words)
+      .orderBy(desc(words.createdAt))
+      .offset(offset)
+      .limit(limit);
   }
 
-  async updateWordPrice(id: string, currentPrice: string): Promise<void> {
+  async getActiveIpos(): Promise<Word[]> {
+    return await db
+      .select()
+      .from(words)
+      .where(eq(words.ipoStatus, 'IPO_ACTIVE'))
+      .orderBy(desc(words.createdAt));
+  }
+
+  async updateWordPrice(id: string, currentPrice: string, lastTradePrice?: string): Promise<void> {
+    const updateData: any = { currentPrice, updatedAt: new Date() };
+    if (lastTradePrice !== undefined) {
+      updateData.lastTradePrice = lastTradePrice;
+    }
     await db
       .update(words)
-      .set({ currentPrice, updatedAt: new Date() })
+      .set(updateData)
       .where(eq(words.id, id));
   }
 
-  async updateWordShares(id: string, sharesOutstanding: number): Promise<void> {
+  async updateWordShares(id: string, outstandingShares: number): Promise<void> {
     await db
       .update(words)
-      .set({ sharesOutstanding, updatedAt: new Date() })
+      .set({ outstandingShares, updatedAt: new Date() })
       .where(eq(words.id, id));
   }
 
-  // ShareHolding operations
-  async getShareHolding(userId: string, wordId: string): Promise<ShareHolding | undefined> {
+  async updateWordIpoStatus(id: string, ipoStatus: string): Promise<void> {
+    await db
+      .update(words)
+      .set({ ipoStatus, updatedAt: new Date() })
+      .where(eq(words.id, id));
+  }
+
+  async updateWordIpoPrice(id: string, ipoCurrentPrice: string): Promise<void> {
+    await db
+      .update(words)
+      .set({ ipoCurrentPrice, updatedAt: new Date() })
+      .where(eq(words.id, id));
+  }
+
+  async updateWordIpoSharesSold(id: string, ipoSharesSold: number): Promise<void> {
+    await db
+      .update(words)
+      .set({ ipoSharesSold, updatedAt: new Date() })
+      .where(eq(words.id, id));
+  }
+
+  async updateWordStats(id: string, stats: { volume24h?: number; tradeCount?: number; marketCap?: string }): Promise<void> {
+    await db
+      .update(words)
+      .set({ ...stats, updatedAt: new Date() })
+      .where(eq(words.id, id));
+  }
+
+  // Holding operations
+  async getHolding(userId: string, wordId: string): Promise<Holding | undefined> {
     const [holding] = await db
       .select()
-      .from(shareHoldings)
-      .where(and(eq(shareHoldings.userId, userId), eq(shareHoldings.wordId, wordId)));
+      .from(holdings)
+      .where(and(eq(holdings.userId, userId), eq(holdings.wordId, wordId)));
     return holding;
   }
 
-  async createShareHolding(userId: string, wordId: string, quantity: number, costBasis: string): Promise<ShareHolding> {
+  async createHolding(data: {
+    userId: string;
+    wordId: string;
+    quantity: number;
+    availableQuantity: number;
+    lockedQuantity: number;
+    averageCost: string;
+  }): Promise<Holding> {
     const [holding] = await db
-      .insert(shareHoldings)
-      .values({ userId, wordId, quantity, costBasis })
+      .insert(holdings)
+      .values(data)
       .returning();
     return holding;
   }
 
-  async updateShareHolding(id: string, quantity: number, costBasis: string): Promise<void> {
+  async updateHolding(id: string, data: {
+    quantity?: number;
+    availableQuantity?: number;
+    lockedQuantity?: number;
+    averageCost?: string;
+  }): Promise<void> {
     await db
-      .update(shareHoldings)
-      .set({ quantity, costBasis, updatedAt: new Date() })
-      .where(eq(shareHoldings.id, id));
+      .update(holdings)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(holdings.id, id));
   }
 
-  async getUserPortfolio(userId: string): Promise<ShareHolding[]> {
+  async getUserPortfolio(userId: string): Promise<Holding[]> {
     return await db
       .select()
-      .from(shareHoldings)
-      .where(eq(shareHoldings.userId, userId));
+      .from(holdings)
+      .where(eq(holdings.userId, userId));
   }
 
-  async getWordHolders(wordId: string): Promise<ShareHolding[]> {
+  async getWordHolders(wordId: string): Promise<Holding[]> {
     return await db
       .select()
-      .from(shareHoldings)
-      .where(eq(shareHoldings.wordId, wordId));
+      .from(holdings)
+      .where(eq(holdings.wordId, wordId));
+  }
+
+  // Order operations
+  async createOrder(data: {
+    userId: string;
+    wordId: string;
+    side: string;
+    orderType: string;
+    quantity: number;
+    remainingQuantity: number;
+    limitPrice?: string;
+  }): Promise<Order> {
+    const [order] = await db
+      .insert(orders)
+      .values(data)
+      .returning();
+    return order;
+  }
+
+  async getOrder(id: string): Promise<Order | undefined> {
+    const [order] = await db.select().from(orders).where(eq(orders.id, id));
+    return order;
+  }
+
+  async getUserOrders(userId: string, status?: string): Promise<Order[]> {
+    const conditions = [eq(orders.userId, userId)];
+    if (status) {
+      conditions.push(eq(orders.status, status));
+    }
+    return await db
+      .select()
+      .from(orders)
+      .where(and(...conditions))
+      .orderBy(desc(orders.createdAt));
+  }
+
+  async getWordOrders(wordId: string, side?: string, status?: string): Promise<Order[]> {
+    const conditions = [eq(orders.wordId, wordId)];
+    if (side) {
+      conditions.push(eq(orders.side, side));
+    }
+    if (status) {
+      conditions.push(eq(orders.status, status));
+    }
+    return await db
+      .select()
+      .from(orders)
+      .where(and(...conditions))
+      .orderBy(desc(orders.createdAt));
+  }
+
+  async getOpenOrders(wordId: string, side: string): Promise<Order[]> {
+    return await db
+      .select()
+      .from(orders)
+      .where(and(
+        eq(orders.wordId, wordId),
+        eq(orders.side, side),
+        or(eq(orders.status, 'OPEN'), eq(orders.status, 'PARTIALLY_FILLED'))
+      ))
+      .orderBy(
+        side === 'BUY' ? desc(orders.limitPrice) : asc(orders.limitPrice),
+        asc(orders.createdAt)
+      );
+  }
+
+  async updateOrder(id: string, data: {
+    filledQuantity?: number;
+    remainingQuantity?: number;
+    status?: string;
+  }): Promise<void> {
+    await db
+      .update(orders)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(orders.id, id));
+  }
+
+  async cancelOrder(id: string): Promise<void> {
+    await db
+      .update(orders)
+      .set({ status: 'CANCELLED', updatedAt: new Date() })
+      .where(eq(orders.id, id));
+  }
+
+  // Trade operations
+  async createTrade(data: {
+    wordId: string;
+    buyerId: string;
+    sellerId: string;
+    buyOrderId?: string;
+    sellOrderId?: string;
+    quantity: number;
+    price: string;
+    totalValue: string;
+    buyerFee: string;
+    sellerFee: string;
+    isIpo: boolean;
+  }): Promise<Trade> {
+    const [trade] = await db
+      .insert(trades)
+      .values(data)
+      .returning();
+    return trade;
+  }
+
+  async getWordTrades(wordId: string, limit: number): Promise<Trade[]> {
+    return await db
+      .select()
+      .from(trades)
+      .where(eq(trades.wordId, wordId))
+      .orderBy(desc(trades.createdAt))
+      .limit(limit);
+  }
+
+  async getUserTrades(userId: string, limit: number): Promise<Trade[]> {
+    return await db
+      .select()
+      .from(trades)
+      .where(or(eq(trades.buyerId, userId), eq(trades.sellerId, userId)))
+      .orderBy(desc(trades.createdAt))
+      .limit(limit);
+  }
+
+  // Vesting operations
+  async createVestingSchedule(data: {
+    userId: string;
+    wordId: string;
+    totalShares: number;
+    schedule: any;
+  }): Promise<VestingSchedule> {
+    const [vesting] = await db
+      .insert(vestingSchedules)
+      .values(data)
+      .returning();
+    return vesting;
+  }
+
+  async getVestingSchedule(userId: string, wordId: string): Promise<VestingSchedule | undefined> {
+    const [vesting] = await db
+      .select()
+      .from(vestingSchedules)
+      .where(and(eq(vestingSchedules.userId, userId), eq(vestingSchedules.wordId, wordId)));
+    return vesting;
+  }
+
+  async getAllVestingSchedules(): Promise<VestingSchedule[]> {
+    return await db.select().from(vestingSchedules);
+  }
+
+  async updateVestingSchedule(id: string, unlockedShares: number): Promise<void> {
+    await db
+      .update(vestingSchedules)
+      .set({ unlockedShares, updatedAt: new Date() })
+      .where(eq(vestingSchedules.id, id));
   }
 
   // Transaction operations
@@ -205,23 +492,6 @@ export class DatabaseStorage implements IStorage {
       .where(eq(transactions.userId, userId))
       .orderBy(desc(transactions.createdAt))
       .limit(limit);
-  }
-
-  // Receipt operations
-  async createReceipt(transactionId: string, receiptData: any): Promise<Receipt> {
-    const [receipt] = await db
-      .insert(receipts)
-      .values({ transactionId, receiptData })
-      .returning();
-    return receipt;
-  }
-
-  async getReceipt(transactionId: string): Promise<Receipt | undefined> {
-    const [receipt] = await db
-      .select()
-      .from(receipts)
-      .where(eq(receipts.transactionId, transactionId));
-    return receipt;
   }
 }
 
