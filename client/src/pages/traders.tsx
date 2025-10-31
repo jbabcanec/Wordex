@@ -25,7 +25,7 @@ export default function Traders() {
   const limit = 50;
 
   const { data: traders, isLoading } = useQuery<User[]>({
-    queryKey: ["/api/traders", { page, limit, query: searchQuery }],
+    queryKey: [`/api/traders?page=${page}&limit=${limit}&query=${encodeURIComponent(searchQuery)}`],
     refetchInterval: 10000,
   });
 

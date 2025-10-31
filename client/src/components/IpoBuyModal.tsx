@@ -25,7 +25,7 @@ interface IpoBuyModalProps {
     ipoCurrentPrice?: string;
     ipoSharesOffered?: number;
     ipoSharesSold?: number;
-    ipoEndsAt?: Date | string;
+    ipoEndsAt?: Date | string | null;
   };
   userBalance: number;
 }

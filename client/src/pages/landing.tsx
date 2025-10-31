@@ -314,8 +314,8 @@ export default function Landing() {
 
             {/* Description */}
             <p className="max-w-2xl text-sm sm:text-base md:text-lg text-muted-foreground px-4">
-              A speculative trading platform where you trade shares in individual words based on their social and cultural power.
-              No phrases, just words. Submit words, trade shares, validate events, and earn dividends when your words gain momentum.
+              A peer-to-peer speculative trading platform where you trade shares in individual words.
+              No phrases, just words. Submit words, trade shares on a live order book, and profit when your words gain momentum.
             </p>
 
             {/* CTA */}
@@ -340,8 +340,8 @@ export default function Landing() {
                   </div>
                   <h3 className="font-display font-semibold text-base sm:text-lg">Submit Words</h3>
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    Submit any single word for 10 WB and receive 50 shares as the creator.
-                    Watch its value grow with cultural events.
+                    Submit any single word for 50 WB and receive 20 shares as the creator (vested over 60 days).
+                    Launch it through a 24-hour Dutch auction IPO.
                   </p>
                 </div>
               </div>
@@ -353,8 +353,8 @@ export default function Landing() {
                   </div>
                   <h3 className="font-display font-semibold text-base sm:text-lg">Trade & Earn</h3>
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    Buy and sell shares at real-time prices. Earn dividends when events
-                    validate the power of your word holdings.
+                    Buy and sell shares through limit and market orders on a live order book.
+                    Pure peer-to-peer trading with price-time priority matching.
                   </p>
                 </div>
               </div>
@@ -374,14 +374,10 @@ export default function Landing() {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-3 gap-4 sm:gap-8 mt-8 sm:mt-12 max-w-2xl w-full px-4">
+            <div className="grid grid-cols-2 gap-4 sm:gap-8 mt-8 sm:mt-12 max-w-xl w-full px-4">
               <div className="text-center">
                 <div className="text-xl sm:text-3xl font-mono font-bold text-primary">10,000</div>
                 <div className="text-[10px] sm:text-sm text-muted-foreground mt-1">WB Signup Bonus</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl sm:text-3xl font-mono font-bold text-primary">100</div>
-                <div className="text-[10px] sm:text-sm text-muted-foreground mt-1">WB Daily Login</div>
               </div>
               <div className="text-center">
                 <div className="text-xl sm:text-3xl font-mono font-bold text-primary">∞</div>
