@@ -18,7 +18,7 @@ interface WordCardProps {
     ipoCurrentPrice?: string;
     ipoSharesOffered?: number;
     ipoSharesSold?: number;
-    ipoEndsAt?: Date | string;
+    ipoEndsAt?: Date | string | null;
     outstandingShares?: number;
     totalShares: number;
     change24h?: number;
