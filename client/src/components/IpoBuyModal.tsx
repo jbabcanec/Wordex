@@ -62,7 +62,7 @@ export function IpoBuyModal({ open, onOpenChange, word, userBalance }: IpoBuyMod
       const response = await fetch(`/api/words/${word.id}/ipo/buy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shares: numShares }),
+        body: JSON.stringify({ quantity: numShares }),
         credentials: "include",
       });
       if (!response.ok) {
