@@ -675,7 +675,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all words (dictionary)
-  app.get('/api/dictionary', async (req, res) => {
+  app.get('/api/allwords', async (req, res) => {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
@@ -684,7 +684,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allWords = await storage.getAllWords(offset, limit);
       res.json(allWords);
     } catch (error) {
-      console.error("Error fetching dictionary:", error);
+      console.error("Error fetching all words:", error);
       res.status(500).json({ message: "Failed to fetch words" });
     }
   });

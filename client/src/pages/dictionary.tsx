@@ -34,7 +34,7 @@ export default function Dictionary() {
   const limit = 50;
 
   const { data: words, isLoading } = useQuery<Word[]>({
-    queryKey: ["/api/dictionary", { page, limit }],
+    queryKey: ["/api/allwords", { page, limit }],
     refetchInterval: 10000,
   });
 
