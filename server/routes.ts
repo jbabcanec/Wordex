@@ -694,7 +694,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
+      const query = (req.query.query as string) || "";
       const offset = (page - 1) * limit;
+
+      // If there's a search query, search by username
+      if (query) {
+        const traders = await db
+          .select()
+          .from(users)
+          .where(sql`LOWER(${users.username}) LIKE LOWER(${'%' + query + '%'})`)
+          .orderBy(desc(users.wbBalance))
+          .limit(limit)
+          .offset(offset);
+        return res.json(traders);
+      }
 
       const allTraders = await storage.getAllTraders(offset, limit);
       res.json(allTraders);

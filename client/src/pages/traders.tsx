@@ -25,15 +25,12 @@ export default function Traders() {
   const limit = 50;
 
   const { data: traders, isLoading } = useQuery<User[]>({
-    queryKey: ["/api/traders", { page, limit }],
+    queryKey: ["/api/traders", { page, limit, query: searchQuery }],
     refetchInterval: 10000,
   });
 
-  // Filter traders based on search
-  const filteredTraders = traders?.filter((trader) => {
-    return searchQuery === "" || 
-      trader.username?.toLowerCase().includes(searchQuery.toLowerCase());
-  }) || [];
+  // Backend now handles filtering
+  const filteredTraders = traders || [];
 
   return (
     <div className="min-h-screen bg-background">
