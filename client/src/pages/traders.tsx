@@ -110,11 +110,11 @@ export default function Traders() {
                   const earnings = parseFloat(trader.totalEarnings);
                   
                   return (
-                    <div
-                      key={trader.id}
-                      className="flex items-center gap-4 p-4 rounded-md border hover-elevate"
-                      data-testid={`trader-row-${trader.id}`}
-                    >
+                    <Link key={trader.id} href={`/users/${trader.id}`}>
+                      <div
+                        className="flex items-center gap-4 p-4 rounded-md border hover-elevate cursor-pointer"
+                        data-testid={`trader-row-${trader.id}`}
+                      >
                       {/* Rank */}
                       <div className="flex-shrink-0 w-12 text-center">
                         {rank <= 3 ? (
@@ -172,6 +172,7 @@ export default function Traders() {
                         </div>
                       </div>
                     </div>
+                    </Link>
                   );
                 })}
               </div>

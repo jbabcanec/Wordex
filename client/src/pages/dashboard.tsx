@@ -111,6 +111,17 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
 
+              <Link href="/transactions">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="hidden sm:flex"
+                  data-testid="button-transactions"
+                >
+                  <BarChart3 className="h-4 w-4" />
+                </Button>
+              </Link>
+
               <Button
                 size="icon"
                 variant="outline"
