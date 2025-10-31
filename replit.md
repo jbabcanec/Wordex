@@ -2,11 +2,11 @@
 
 ## Overview
 
-WORDEX is a speculative trading platform where users trade shares in individual words using real supply and demand mechanics. The platform features a stock market-style interface where word prices increase when people buy and decrease when people sell, powered by a bonding curve pricing algorithm. Users compete on leaderboards and build portfolios using the virtual WordBucks (WB) currency.
+WORDEX is a peer-to-peer speculative trading platform where users trade shares in individual words using a real order book system. New words launch through 24-hour Dutch auction IPOs (starting at $2.00, declining to $0.10). After IPO completion, words trade on a continuous order book with limit and market orders matched by price-time priority. The platform features a professional Bloomberg/Robinhood-style interface with live order books, real-time price updates, and leaderboard rankings.
 
 **Tagline**: "Short the patriarchy. Long your vocabulary. Trade the zeitgeist."
 
-The application is built as a full-stack TypeScript application with a React frontend and Express backend, using username/password authentication and designed to work organically from a single user upward without requiring other traders to function.
+The application is built as a full-stack TypeScript application with a React frontend and Express backend, using username/password authentication. The platform is purely peer-to-peer (platform is NOT a counterparty), with all trades occurring between users.
 
 ## User Preferences
 
@@ -27,15 +27,20 @@ Preferred communication style: Simple, everyday language.
 
 **State Management**: TanStack Query (React Query) for server state management, with a custom query client configuration that handles authentication and error states.
 
-**Routing**: Wouter for lightweight client-side routing with two main routes: Landing page (unauthenticated) and Dashboard (authenticated).
+**Routing**: Wouter for lightweight client-side routing with main pages:
+- Landing page (unauthenticated)
+- Dashboard (authenticated) - Active IPOs feed, portfolio, leaderboard
+- Dictionary - Browse and search all words
+- Traders - Browse and search all users
 
 **Key Design Patterns**:
 - Component composition with shadcn/ui primitives
-- Real-time data updates via polling (5-30 second intervals)
+- Real-time data updates via polling (5-30 second intervals for order books, 10s for IPOs)
 - Optimistic UI updates with query invalidation
 - Toast notifications for user feedback
-- Modal-based interactions for trading and word submission
-- Horizontally scrollable stock ticker banner showing top trending words with day-over-day price changes
+- Modal-based interactions: TradeModal (limit/market orders), IpoBuyModal (Dutch auction), SubmitWordModal
+- Live order book depth display with price-time priority
+- Countdown timers for Dutch auction IPOs
 
 ### Backend Architecture
 
@@ -43,39 +48,53 @@ Preferred communication style: Simple, everyday language.
 
 **API Design**: RESTful API endpoints with the following categories:
 - Authentication (`/api/auth/*`)
-- Words (`/api/words/*`)
-- Trading (`/api/trade`)
-- Portfolio (`/api/portfolio`)
+- Words (`/api/words/*`) - Browse, search, get word details
+- IPO (`/api/ipo/buy`) - Purchase shares during Dutch auction
+- Trading (`/api/trade`) - Place limit/market orders
+- Order Book (`/api/words/:id/orderbook`) - Get live bid/ask depth
+- Portfolio (`/api/portfolio`) - User holdings and vested shares
 - Leaderboard (`/api/leaderboard`)
+- Traders (`/api/traders`) - Browse and search all users
 - Receipts (`/api/receipts/*`)
+
+**Background Jobs**: Node-cron scheduled tasks:
+- **IPO Price Updates** (hourly): Updates Dutch auction prices for all active IPOs based on time elapsed
+- **Vesting Unlocks** (daily at midnight): Unlocks creator shares that have reached their vesting date (60-day linear vesting)
 
 **Session Management**: Express-session with PostgreSQL session store (connect-pg-simple) for persistent user sessions.
 
 **Key Business Logic**:
 - **Word Normalization**: All words stored in uppercase without spaces for consistent matching
-- **Trading Mechanics**: 2% platform spread (buy at price × 1.02, sell at price × 0.98), 0.5% transaction fee
-- **Supply/Demand Pricing**: Bonding curve algorithm where price increases with shares sold. Each word starts at 1.00 WB base price with 100,000 total shares. Price formula: `basePrice × (1 + 0.5 × sharesOutstanding / totalShares)`
-- **Word Submission**: Costs 10 WB to submit a word, submitter automatically receives 5,000 shares (5% of total supply)
+- **IPO Dutch Auction**: New words launch with 24-hour declining price auction ($2.00 → $0.10). Price updates hourly via cron job. IPO completes when 980/1000 shares sell (98%) or 24 hours elapse.
+- **Share Allocation**: 1,000 shares per word. Creator receives 20 shares (2%) with 60-day linear vesting. 980 shares available in IPO.
+- **Word Submission**: Costs 50 WB to submit a word. Creator receives 20 shares vesting over 60 days (1 share every 3 days).
+- **Order Book Trading**: After IPO completion, words trade peer-to-peer with limit and market orders. Price-time priority matching with atomic database transactions.
+- **Trading Fees**: 0.5% transaction fee on all trades (both IPO purchases and order book trades)
+- **Order Matching**: Limit orders stored in database with price-time priority. Market orders match against best available limit orders. Orders can be partially filled.
+- **IPO Failure**: If fewer than 980 shares sell within 24 hours, IPO fails. All buyers receive full refunds (including fees). Creator keeps their 20 shares but they're locked as "FAILED" status.
 - **WordBucks Economy**: Virtual currency system with initial 10,000 WB signup bonus
-- **Ticker Percentage Change**: Day-over-day price change calculated by comparing current price to most recent transaction from before today (midnight). Shows 0% for words without yesterday's trading data.
 
 ### Database Architecture
 
 **ORM**: Drizzle ORM with Neon Serverless PostgreSQL driver.
 
 **Schema Design**:
-- `users`: User profiles with WB balance tracking and earnings
-- `words`: Submitted words with normalized text, current price (calculated via bonding curve), and share metrics
-- `shareHoldings`: User portfolio positions with cost basis tracking
-- `transactions`: Complete transaction history for receipts and audit trail
+- `users`: User profiles with WB balance tracking and total earnings
+- `words`: Submitted words with IPO status (IPO_ACTIVE, TRADING, IPO_FAILED), IPO pricing (startPrice, currentPrice, ipoStartTime, ipoEndTime), and share metrics
+- `shareHoldings`: User portfolio positions tracking locked (vesting) and unlocked shares with cost basis
+- `limitOrders`: Active limit orders (BUY/SELL) with price, quantity, and timestamps for price-time priority
+- `transactions`: Complete transaction history including type (IPO_BUY, LIMIT_BUY, LIMIT_SELL, MARKET_BUY, MARKET_SELL)
 - `receipts`: Persistent transaction records
 - `sessions`: Session storage for authentication
 
 **Key Constraints**:
 - Word text must be unique (normalized uppercase without spaces)
-- Share holdings track cost basis for profit/loss calculations
-- Foreign key relationships maintain referential integrity
+- Share holdings track cost basis and separate locked/unlocked quantities for vesting
+- Limit orders enforce positive prices and quantities
+- Foreign key relationships maintain referential integrity with cascade deletes
 - Decimal precision for financial values (20 digits, 2 decimal places)
+- IPO times validated to ensure 24-hour duration
+- Order matching uses database transactions for atomicity
 
 ### Authentication System
 
@@ -113,6 +132,7 @@ Preferred communication style: Simple, everyday language.
 - `bcryptjs`: Password hashing
 - `express-session`: Session management
 - `connect-pg-simple`: PostgreSQL session store
+- `node-cron`: Scheduled jobs for IPO price updates and vesting unlocks
 
 **Development**:
 - `vite`: Build tool and dev server
