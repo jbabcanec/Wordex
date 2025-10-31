@@ -27,7 +27,7 @@ export interface IStorage {
   updateUserBalance(userId: string, newBalance: string): Promise<void>;
   updateUserLogin(userId: string): Promise<void>;
   updateUserEarnings(userId: string, earnings: string): Promise<void>;
-  getTopTraders(limit: number): Promise<Array<User & { rank: number }>>;
+  getTopTraders(limit: number): Promise<Array<User & { rank: number; portfolioValue: string; holdingsValue: string }>>;
   getAllTraders(offset: number, limit: number): Promise<User[]>;
   
   // Word operations
@@ -160,14 +160,54 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId));
   }
 
-  async getTopTraders(limit: number): Promise<Array<User & { rank: number }>> {
-    const result = await db
+  async getTopTraders(limit: number): Promise<Array<User & { rank: number; portfolioValue: string; holdingsValue: string }>> {
+    const allUsers = await db
       .select()
       .from(users)
-      .orderBy(desc(users.totalEarnings))
-      .limit(limit);
+      .orderBy(desc(users.totalEarnings));
     
-    return result.map((user, index) => ({
+    // Calculate holdings value for each user
+    const usersWithPortfolio = await Promise.all(
+      allUsers.map(async (user) => {
+        // Get all holdings for this user
+        const userHoldings = await db
+          .select()
+          .from(holdings)
+          .where(eq(holdings.userId, user.id));
+        
+        // Calculate total holdings value
+        let holdingsValue = 0;
+        for (const holding of userHoldings) {
+          const word = await db
+            .select()
+            .from(words)
+            .where(eq(words.id, holding.wordId))
+            .limit(1);
+          
+          if (word[0]) {
+            const price = parseFloat(word[0].currentPrice || '0');
+            const quantity = holding.quantity;
+            holdingsValue += price * quantity;
+          }
+        }
+        
+        const wbBalance = parseFloat(user.wbBalance);
+        const portfolioValue = wbBalance + holdingsValue;
+        
+        return {
+          ...user,
+          holdingsValue: holdingsValue.toFixed(2),
+          portfolioValue: portfolioValue.toFixed(2),
+        };
+      })
+    );
+    
+    // Sort by portfolio value and take top limit
+    const sorted = usersWithPortfolio
+      .sort((a, b) => parseFloat(b.portfolioValue) - parseFloat(a.portfolioValue))
+      .slice(0, limit);
+    
+    return sorted.map((user, index) => ({
       ...user,
       rank: index + 1,
     }));
