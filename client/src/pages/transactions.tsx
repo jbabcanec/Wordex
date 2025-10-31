@@ -5,6 +5,14 @@ import { formatWB } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -22,6 +30,8 @@ import {
   ArrowDownRight,
   Plus,
   Coins,
+  Search,
+  Filter,
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Transaction, Word } from "@shared/schema";
@@ -33,10 +43,40 @@ type TransactionWithWord = {
 
 export default function Transactions() {
   const [page, setPage] = useState(1);
+  const [filterType, setFilterType] = useState<string>("ALL");
+  const [searchText, setSearchText] = useState("");
   const limit = 50;
 
   const { data: transactions, isLoading } = useQuery<TransactionWithWord[]>({
-    queryKey: ["/api/transactions", { page, limit }],
+    queryKey: [
+      "/api/transactions",
+      {
+        page,
+        limit,
+        type: filterType !== "ALL" ? filterType : undefined,
+        search: searchText || undefined,
+      },
+    ],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+      });
+      
+      if (filterType !== "ALL") {
+        params.append("type", filterType);
+      }
+      
+      if (searchText) {
+        params.append("search", searchText);
+      }
+      
+      const response = await fetch(`/api/transactions?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch transactions");
+      }
+      return response.json();
+    },
     refetchInterval: 30000,
   });
 
@@ -76,6 +116,16 @@ export default function Transactions() {
     return "outline";
   };
 
+  const handleFilterChange = (value: string) => {
+    setFilterType(value);
+    setPage(1); // Reset to page 1 when filter changes
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchText(e.target.value);
+    setPage(1); // Reset to page 1 when search changes
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -103,10 +153,43 @@ export default function Transactions() {
       </header>
 
       <main className="container max-w-screen-2xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
+        {/* Filter and Search Controls */}
+        <div className="mb-6 flex flex-col sm:flex-row gap-4">
+          <div className="flex items-center gap-2 flex-1 max-w-md">
+            <Search className="h-5 w-5 text-muted-foreground" />
+            <Input
+              placeholder="Search by word..."
+              value={searchText}
+              onChange={handleSearchChange}
+              className="flex-1"
+              data-testid="input-search-word"
+            />
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Filter className="h-5 w-5 text-muted-foreground" />
+            <Select value={filterType} onValueChange={handleFilterChange}>
+              <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-filter-type">
+                <SelectValue placeholder="Filter by type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Types</SelectItem>
+                <SelectItem value="BUY">Buy Orders</SelectItem>
+                <SelectItem value="SELL">Sell Orders</SelectItem>
+                <SelectItem value="IPO">IPO Purchases</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         {/* Transactions Table */}
         <Card>
           <CardHeader>
-            <CardTitle className="font-display">All Transactions</CardTitle>
+            <CardTitle className="font-display">
+              {filterType !== "ALL"
+                ? `${filterType === "BUY" ? "Buy" : filterType === "SELL" ? "Sell" : "IPO"} Transactions`
+                : "All Transactions"}
+              {searchText && ` matching "${searchText}"`}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -121,10 +204,14 @@ export default function Transactions() {
                   <Receipt className="h-10 w-10 text-primary" />
                 </div>
                 <h3 className="text-xl font-display font-semibold mb-2">
-                  No Transactions Yet
+                  {searchText || filterType !== "ALL"
+                    ? "No Matching Transactions"
+                    : "No Transactions Yet"}
                 </h3>
                 <p className="text-muted-foreground">
-                  Start trading to see your transaction history here
+                  {searchText || filterType !== "ALL"
+                    ? "Try adjusting your filters or search"
+                    : "Start trading to see your transaction history here"}
                 </p>
               </div>
             ) : (

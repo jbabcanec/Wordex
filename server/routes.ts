@@ -753,13 +753,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get transactions with word data
+  // Get transactions with word data, filtering, and search
   app.get('/api/transactions', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = (page - 1) * limit;
+      const type = req.query.type as string; // ALL, BUY, SELL, IPO
+      const search = req.query.search as string;
+
+      // Build conditions array
+      let conditions: any[] = [eq(transactions.userId, userId)];
+
+      // Filter by transaction type
+      if (type === "BUY") {
+        conditions.push(
+          or(
+            eq(transactions.type, "LIMIT_BUY"),
+            eq(transactions.type, "MARKET_BUY")
+          )
+        );
+      } else if (type === "SELL") {
+        conditions.push(
+          or(
+            eq(transactions.type, "LIMIT_SELL"),
+            eq(transactions.type, "MARKET_SELL")
+          )
+        );
+      } else if (type === "IPO") {
+        conditions.push(eq(transactions.type, "IPO_BUY"));
+      }
+
+      // Filter by word search
+      if (search && search.trim()) {
+        const { ilike } = await import("drizzle-orm");
+        conditions.push(ilike(words.displayText, `%${search.trim()}%`));
+      }
 
       // Get transactions with word data joined
       const userTransactions = await db
@@ -769,7 +799,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .from(transactions)
         .leftJoin(words, eq(transactions.wordId, words.id))
-        .where(eq(transactions.userId, userId))
+        .where(and(...conditions))
         .orderBy(desc(transactions.createdAt))
         .limit(limit)
         .offset(offset);
