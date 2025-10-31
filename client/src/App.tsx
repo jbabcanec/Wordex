@@ -9,8 +9,6 @@ import Dashboard from "@/pages/dashboard";
 import Dictionary from "@/pages/dictionary";
 import Traders from "@/pages/traders";
 import Transactions from "@/pages/transactions";
-import WordDetail from "@/pages/word-detail";
-import UserProfile from "@/pages/user-profile";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -30,8 +28,6 @@ function Router() {
       <Route path="/dictionary" component={Dictionary} />
       <Route path="/traders" component={Traders} />
       <Route path="/transactions" component={Transactions} />
-      <Route path="/words/:id" component={WordDetail} />
-      <Route path="/users/:id" component={UserProfile} />
       <Route component={NotFound} />
     </Switch>
   );
