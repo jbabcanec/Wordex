@@ -115,7 +115,7 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
           description: `Limit ${side} order for ${numShares} shares at ${formatWB(limitPriceNum)} WB`,
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       queryClient.invalidateQueries({ queryKey: ["/api/words"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portfolio"] });
       queryClient.invalidateQueries({ queryKey: ["/api/orders/my"] });
