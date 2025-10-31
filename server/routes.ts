@@ -4,60 +4,29 @@ import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { db } from "./db";
-import { words, users, transactions, receipts, shareHoldings } from "@shared/schema";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { words, users, transactions, holdings, orders, trades, vestingSchedules } from "@shared/schema";
+import { eq, and, sql, desc, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import passport from "passport";
+import {
+  SUBMISSION_FEE,
+  SHARES_PER_WORD,
+  CREATOR_SHARES,
+  IPO_SHARES,
+  TRADING_FEE_PERCENT,
+  IPO_START_PRICE,
+  IPO_END_PRICE,
+  IPO_DURATION_HOURS,
+  VESTING_SCHEDULE,
+  DAILY_LOGIN_BONUS,
+  MIN_IPO_SHARES_SOLD,
+  calculateIpoPrice,
+  calculateTradingFee,
+  calculateVestingUnlocked,
+} from "@shared/constants";
 
 // Helper function to normalize word text: ALL CAPS, NO SPACES
 function normalizeWord(text: string): string {
   return text.toUpperCase().replace(/\s+/g, '');
-}
-
-// Supply/Demand Pricing: Linear bonding curve
-// Price increases as more shares are sold from the pool
-// Formula: basePrice * (1 + 0.5 * sharesOutstanding / totalShares)
-// Price ranges from $1.025 (at 5000 shares) to $1.50 (at 100000 shares)
-function calculateCurrentPrice(sharesOutstanding: number, totalShares: number = 100000): number {
-  const basePrice = 1.00;
-  const k = 0.5; // Linear price multiplier
-  const ratio = sharesOutstanding / totalShares;
-  const price = basePrice * (1 + k * ratio);
-  return Math.max(1.00, price); // Minimum $1.00
-}
-
-// Calculate price after a buy/sell transaction
-function calculateNewPrice(currentShares: number, shareDelta: number, totalShares: number = 100000): number {
-  const newShares = currentShares + shareDelta;
-  return calculateCurrentPrice(newShares, totalShares);
-}
-
-// Helper function to calculate fee (0.5%)
-function calculateFee(amount: number): number {
-  return amount * 0.005;
-}
-
-// Apply platform spread (2% markup for buys, 2% markdown for sells)
-function applySpread(currentPrice: number, isBuy: boolean): number {
-  return isBuy ? currentPrice * 1.02 : currentPrice * 0.98;
-}
-
-// Helper function to generate receipt data
-function generateReceiptData(transaction: any, word?: any): any {
-  return {
-    receiptId: transaction.id,
-    date: transaction.createdAt,
-    action: transaction.type,
-    word: word?.textNormalized || null,
-    quantity: transaction.quantity,
-    pricePerShare: transaction.pricePerShare,
-    totalAmount: transaction.totalAmount,
-    fee: transaction.fee,
-    balanceBefore: transaction.balanceBefore,
-    balanceAfter: transaction.balanceAfter,
-    description: transaction.description,
-    transactionId: transaction.id,
-  };
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -69,7 +38,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { username, password, email, firstName, lastName } = req.body;
 
-      // Validate required fields
       if (!username || !password) {
         return res.status(400).json({ message: "Username and password are required" });
       }
@@ -82,7 +50,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Password must be at least 6 characters" });
       }
 
-      // Check if username already exists
       const [existingUser] = await db
         .select()
         .from(users)
@@ -93,10 +60,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Username already taken" });
       }
 
-      // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Create user
       const [newUser] = await db
         .insert(users)
         .values({
@@ -108,7 +73,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .returning();
 
-      // Log the user in automatically
       req.login({
         claims: {
           sub: newUser.id,
@@ -121,636 +85,885 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (err) {
           return res.status(500).json({ message: "Signup successful but login failed" });
         }
-        // Return only safe, non-sensitive user data
         res.json({ 
-          message: "Signup successful", 
-          user: {
-            id: newUser.id,
-            username: newUser.username,
-            email: newUser.email,
-            firstName: newUser.firstName,
-            lastName: newUser.lastName,
-          }
+          id: newUser.id,
+          username: newUser.username,
+          email: newUser.email,
+          firstName: newUser.firstName,
+          lastName: newUser.lastName,
+          wbBalance: newUser.wbBalance,
         });
       });
     } catch (error: any) {
       console.error("Signup error:", error);
-      res.status(500).json({ message: "Failed to create account" });
+      res.status(500).json({ message: "Signup failed" });
     }
   });
 
-  // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  // Login endpoint
+  app.post('/api/login', async (req, res, next) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ message: "Username and password are required" });
+    }
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, username))
+      .limit(1);
+
+    if (!user || !user.password) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    // Daily login bonus
+    const lastLogin = user.lastLogin ? new Date(user.lastLogin) : null;
+    const now = new Date();
+    const daysSinceLogin = lastLogin ? (now.getTime() - lastLogin.getTime()) / (1000 * 60 * 60 * 24) : 999;
+    
+    if (daysSinceLogin >= 1) {
+      const currentBalance = parseFloat(user.wbBalance);
+      const newBalance = (currentBalance + DAILY_LOGIN_BONUS).toFixed(2);
+      await storage.updateUserBalance(user.id, newBalance);
+      await storage.createTransaction({
+        userId: user.id,
+        type: 'DAILY_LOGIN',
+        totalAmount: DAILY_LOGIN_BONUS.toFixed(2),
+        fee: '0.00',
+        balanceBefore: user.wbBalance,
+        balanceAfter: newBalance,
+        description: `Daily login bonus`,
+      });
+      user.wbBalance = newBalance;
+    }
+
+    await storage.updateUserLogin(user.id);
+
+    req.login({
+      claims: {
+        sub: user.id,
+        email: user.email,
+        first_name: user.firstName,
+        last_name: user.lastName,
+      },
+      isLocal: true,
+    }, (err) => {
+      if (err) {
+        return res.status(500).json({ message: "Login failed" });
+      }
+      res.json({
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        wbBalance: user.wbBalance,
+      });
+    });
+  });
+
+  // Get current user
+  app.get('/api/user', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-      
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-
-      // Check for daily login bonus (100 WB if last login was > 24 hours ago)
-      const now = new Date();
-      const lastLogin = user.lastLogin ? new Date(user.lastLogin) : null;
-      
-      if (!lastLogin || (now.getTime() - lastLogin.getTime()) > 24 * 60 * 60 * 1000) {
-        // Use atomic transaction for daily bonus
-        await db.transaction(async (tx) => {
-          const dailyBonus = 100;
-          const newBalance = (parseFloat(user.wbBalance) + dailyBonus).toFixed(2);
-          const newEarnings = (parseFloat(user.totalEarnings) + dailyBonus).toFixed(2);
-          
-          // Update user balance and login atomically
-          await tx
-            .update(users)
-            .set({ 
-              wbBalance: newBalance,
-              totalEarnings: newEarnings,
-              lastLogin: now,
-              updatedAt: new Date()
-            })
-            .where(eq(users.id, userId));
-          
-          // Create transaction record
-          const [transaction] = await tx
-            .insert(transactions)
-            .values({
-              userId,
-              wordId: null,
-              type: 'DAILY_LOGIN',
-              quantity: null,
-              pricePerShare: null,
-              totalAmount: dailyBonus.toFixed(2),
-              fee: '0.00',
-              balanceBefore: user.wbBalance,
-              balanceAfter: newBalance,
-              description: 'Daily login bonus',
-            })
-            .returning();
-          
-          // Create receipt
-          await tx
-            .insert(receipts)
-            .values({
-              transactionId: transaction.id,
-              receiptData: generateReceiptData(transaction),
-            });
-          
-          user.wbBalance = newBalance;
-          user.totalEarnings = newEarnings;
-          user.lastLogin = now;
-        });
-      }
-      
-      res.json(user);
+      res.json({
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        wbBalance: user.wbBalance,
+        totalEarnings: user.totalEarnings,
+      });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
     }
   });
 
-  // Word submission endpoint
+  // Submit word (creates IPO)
   app.post('/api/words', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const { text } = req.body;
-      
+
       if (!text || typeof text !== 'string') {
-        return res.status(400).json({ message: "Invalid word text" });
+        return res.status(400).json({ message: "Word text is required" });
       }
-      
+
       const normalized = normalizeWord(text);
-      
       if (normalized.length === 0 || normalized.length > 100) {
-        return res.status(400).json({ message: "Word must be 1-100 characters after normalization" });
+        return res.status(400).json({ message: "Word must be 1-100 characters (spaces removed)" });
       }
-      
-      const submissionFee = 10;
-      
-      // Use atomic transaction for word submission with validation inside
+
       const result = await db.transaction(async (tx) => {
-        // Check for duplicates inside transaction
-        const [existing] = await tx
+        const [existingWord] = await tx
           .select()
           .from(words)
           .where(eq(words.textNormalized, normalized))
-          .limit(1);
-        
-        if (existing) {
+          .for('update');
+
+        if (existingWord) {
           throw new Error("This word already exists");
         }
-        
-        // Get and validate user balance inside transaction (with row lock)
+
         const [user] = await tx
           .select()
           .from(users)
           .where(eq(users.id, userId))
           .for('update');
-        
+
         if (!user) {
           throw new Error("User not found");
         }
-        
+
         const balance = parseFloat(user.wbBalance);
-        if (balance < submissionFee) {
-          throw new Error("Insufficient balance. Need 10 WB to submit a word.");
+        if (balance < SUBMISSION_FEE) {
+          throw new Error(`Insufficient balance. Need ${SUBMISSION_FEE} WB to submit a word.`);
         }
-        const newBalance = (balance - submissionFee).toFixed(2);
-        
-        // Update user balance
+        const newBalance = (balance - SUBMISSION_FEE).toFixed(2);
+
         await tx
           .update(users)
           .set({ wbBalance: newBalance, updatedAt: new Date() })
           .where(eq(users.id, userId));
-        
-        // Create the word
+
+        const ipoStartedAt = new Date();
+        const ipoEndsAt = new Date(ipoStartedAt.getTime() + IPO_DURATION_HOURS * 60 * 60 * 1000);
+
         const [word] = await tx
           .insert(words)
           .values({
             textNormalized: normalized,
             displayText: text,
-            submitterId: userId,
+            creatorId: userId,
+            ipoStartedAt,
+            ipoEndsAt,
           })
           .returning();
-        
-        // Grant creator 5000 shares (5% of total supply)
-        const creatorShares = 5000;
-        const costBasis = '0.00';
+
+        // Create vesting schedule for creator shares
         await tx
-          .insert(shareHoldings)
+          .insert(vestingSchedules)
           .values({
             userId,
             wordId: word.id,
-            quantity: creatorShares,
-            costBasis,
+            totalShares: CREATOR_SHARES,
+            unlockedShares: 0,
+            schedule: VESTING_SCHEDULE,
           });
-        
-        // Create transaction record
+
+        // Create holding for creator (all shares locked initially)
+        await tx
+          .insert(holdings)
+          .values({
+            userId,
+            wordId: word.id,
+            quantity: CREATOR_SHARES,
+            availableQuantity: 0,
+            lockedQuantity: CREATOR_SHARES,
+            averageCost: '0.00',
+          });
+
         const [transaction] = await tx
           .insert(transactions)
           .values({
             userId,
             wordId: word.id,
             type: 'SUBMIT_WORD',
-            quantity: creatorShares,
-            pricePerShare: '0.00',
-            totalAmount: `-${submissionFee.toFixed(2)}`,
+            totalAmount: `-${SUBMISSION_FEE.toFixed(2)}`,
             fee: '0.00',
             balanceBefore: user.wbBalance,
             balanceAfter: newBalance,
-            description: `Submitted word: ${normalized} (received ${creatorShares} creator shares)`,
+            description: `Submitted word: ${normalized} (IPO started, ${CREATOR_SHARES} shares vesting)`,
           })
           .returning();
-        
-        // Create receipt
-        await tx
-          .insert(receipts)
-          .values({
-            transactionId: transaction.id,
-            receiptData: generateReceiptData(transaction, word),
-          });
-        
+
         return { word, transaction };
       });
-      
-      res.json({ ...result, receiptId: result.transaction.id });
+
+      res.json(result);
     } catch (error: any) {
       console.error("Error submitting word:", error);
       res.status(500).json({ message: error.message || "Failed to submit word" });
     }
   });
 
-  // Trading endpoint (buy/sell)
-  app.post('/api/trade', isAuthenticated, async (req: any, res) => {
+  // Buy IPO shares
+  app.post('/api/words/:wordId/ipo/buy', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { wordId, quantity, action } = req.body;
-      
-      if (!wordId || !quantity || !action) {
-        return res.status(400).json({ message: "Missing required fields" });
-      }
-      
-      if (!['buy', 'sell'].includes(action)) {
-        return res.status(400).json({ message: "Action must be 'buy' or 'sell'" });
-      }
-      
-      const quantityNum = parseInt(quantity);
-      if (isNaN(quantityNum) || quantityNum <= 0) {
+      const { wordId } = req.params;
+      const { quantity } = req.body;
+
+      if (!quantity || quantity <= 0) {
         return res.status(400).json({ message: "Invalid quantity" });
       }
-      
-      const isBuy = action === 'buy';
-      
-      if (isBuy) {
-        // BUY logic - all validation inside transaction
-        const result = await db.transaction(async (tx) => {
-          // Lock and get word data
-          const [word] = await tx
-            .select()
-            .from(words)
-            .where(eq(words.id, wordId))
-            .for('update');
-          
-          if (!word) {
-            throw new Error("Word not found");
-          }
-          
-          // Lock and get user data
-          const [user] = await tx
-            .select()
-            .from(users)
-            .where(eq(users.id, userId))
-            .for('update');
-          
-          if (!user) {
-            throw new Error("User not found");
-          }
-          
-          // Calculate prices with locked data
-          const userBalance = parseFloat(user.wbBalance);
-          const currentPrice = parseFloat(word.currentPrice);
-          const pricePerShare = applySpread(currentPrice, true); // Buy at current price + 2% spread
-          const subtotal = pricePerShare * quantityNum;
-          const fee = calculateFee(subtotal);
-          const total = subtotal + fee;
-          
-          // Validate inside transaction
-          const availableShares = word.totalShares - word.sharesOutstanding;
-          if (quantityNum > availableShares) {
-            throw new Error(`Only ${availableShares} shares available from platform`);
-          }
-          
-          if (total > userBalance) {
-            throw new Error("Insufficient balance");
-          }
-          const newBalance = (userBalance - total).toFixed(2);
-          
-          // Calculate new price after buying (price goes UP)
-          const newPrice = calculateNewPrice(word.sharesOutstanding, quantityNum, word.totalShares);
-          
-          // Update user balance
+
+      const result = await db.transaction(async (tx) => {
+        const [word] = await tx
+          .select()
+          .from(words)
+          .where(eq(words.id, wordId))
+          .for('update');
+
+        if (!word) {
+          throw new Error("Word not found");
+        }
+
+        if (word.ipoStatus !== 'IPO_ACTIVE') {
+          throw new Error("IPO is not active for this word");
+        }
+
+        const now = new Date();
+        if (!word.ipoStartedAt || !word.ipoEndsAt) {
+          throw new Error("IPO not properly initialized");
+        }
+
+        if (now > word.ipoEndsAt) {
+          throw new Error("IPO has ended");
+        }
+
+        const elapsedHours = (now.getTime() - word.ipoStartedAt.getTime()) / (1000 * 60 * 60);
+        const currentIpoPrice = calculateIpoPrice(elapsedHours);
+
+        const sharesAvailable = word.ipoSharesOffered - word.ipoSharesSold;
+        if (quantity > sharesAvailable) {
+          throw new Error(`Only ${sharesAvailable} shares available in IPO`);
+        }
+
+        const [user] = await tx
+          .select()
+          .from(users)
+          .where(eq(users.id, userId))
+          .for('update');
+
+        if (!user) {
+          throw new Error("User not found");
+        }
+
+        const totalValue = quantity * currentIpoPrice;
+        const fee = calculateTradingFee(totalValue);
+        const totalCost = totalValue + fee;
+
+        const balance = parseFloat(user.wbBalance);
+        if (balance < totalCost) {
+          throw new Error(`Insufficient balance. Need ${totalCost.toFixed(2)} WB (${totalValue.toFixed(2)} + ${fee.toFixed(2)} fee)`);
+        }
+
+        const newBalance = (balance - totalCost).toFixed(2);
+        await tx
+          .update(users)
+          .set({ wbBalance: newBalance, updatedAt: new Date() })
+          .where(eq(users.id, userId));
+
+        const newIpoSharesSold = word.ipoSharesSold + quantity;
+        const newOutstanding = word.outstandingShares + quantity;
+
+        let newIpoStatus = word.ipoStatus;
+        if (newIpoSharesSold >= word.ipoSharesOffered) {
+          newIpoStatus = 'TRADING';
+        }
+
+        await tx
+          .update(words)
+          .set({
+            ipoSharesSold: newIpoSharesSold,
+            ipoCurrentPrice: currentIpoPrice.toFixed(2),
+            outstandingShares: newOutstanding,
+            ipoStatus: newIpoStatus,
+            lastTradePrice: currentIpoPrice.toFixed(2),
+            currentPrice: currentIpoPrice.toFixed(2),
+            marketCap: (currentIpoPrice * (SHARES_PER_WORD)).toFixed(2),
+            tradeCount: word.tradeCount + 1,
+            updatedAt: new Date(),
+          })
+          .where(eq(words.id, wordId));
+
+        const [holding] = await tx
+          .select()
+          .from(holdings)
+          .where(and(eq(holdings.userId, userId), eq(holdings.wordId, wordId)));
+
+        if (holding) {
+          const newQuantity = holding.quantity + quantity;
+          const newAvailable = holding.availableQuantity + quantity;
+          const newCost = (parseFloat(holding.averageCost) * holding.quantity + totalValue) / newQuantity;
           await tx
-            .update(users)
-            .set({ wbBalance: newBalance, updatedAt: new Date() })
-            .where(eq(users.id, userId));
-          
-          // Update shares outstanding AND price
-          await tx
-            .update(words)
-            .set({ 
-              sharesOutstanding: word.sharesOutstanding + quantityNum,
-              currentPrice: newPrice.toFixed(2),
-              updatedAt: new Date()
+            .update(holdings)
+            .set({
+              quantity: newQuantity,
+              availableQuantity: newAvailable,
+              averageCost: newCost.toFixed(2),
+              updatedAt: new Date(),
             })
-            .where(eq(words.id, wordId));
-          
-          // Lock and update or create shareholding
-          const [existingHolding] = await tx
-            .select()
-            .from(shareHoldings)
-            .where(and(eq(shareHoldings.userId, userId), eq(shareHoldings.wordId, wordId)))
-            .for('update');
-          
-          if (existingHolding) {
-            const newQuantity = existingHolding.quantity + quantityNum;
-            const newCostBasis = (parseFloat(existingHolding.costBasis) + subtotal).toFixed(2);
-            await tx
-              .update(shareHoldings)
-              .set({ quantity: newQuantity, costBasis: newCostBasis, updatedAt: new Date() })
-              .where(eq(shareHoldings.id, existingHolding.id));
-          } else {
-            await tx
-              .insert(shareHoldings)
-              .values({ userId, wordId, quantity: quantityNum, costBasis: subtotal.toFixed(2) });
-          }
-          
-          // Create transaction record
-          const [transaction] = await tx
-            .insert(transactions)
+            .where(eq(holdings.id, holding.id));
+        } else {
+          await tx
+            .insert(holdings)
             .values({
               userId,
               wordId,
-              type: 'BUY',
-              quantity: quantityNum,
-              pricePerShare: pricePerShare.toFixed(2),
-              totalAmount: subtotal.toFixed(2),
-              fee: fee.toFixed(2),
-              balanceBefore: user.wbBalance,
-              balanceAfter: newBalance,
-              description: `Bought ${quantityNum} shares of ${word.textNormalized}`,
-            })
-            .returning();
-          
-          // Create receipt
-          await tx
-            .insert(receipts)
-            .values({
-              transactionId: transaction.id,
-              receiptData: generateReceiptData(transaction, word),
+              quantity,
+              availableQuantity: quantity,
+              lockedQuantity: 0,
+              averageCost: currentIpoPrice.toFixed(2),
             });
-          
-          return transaction;
-        });
-        
-        res.json({ success: true, transaction: result, receiptId: result.id });
-      } else {
-        // SELL logic - all validation inside transaction
-        const result = await db.transaction(async (tx) => {
-          // Lock and get word data
-          const [word] = await tx
-            .select()
-            .from(words)
-            .where(eq(words.id, wordId))
-            .for('update');
-          
-          if (!word) {
-            throw new Error("Word not found");
-          }
-          
-          // Lock and get user data
-          const [user] = await tx
-            .select()
-            .from(users)
-            .where(eq(users.id, userId))
-            .for('update');
-          
-          if (!user) {
-            throw new Error("User not found");
-          }
-          
-          // Lock and get holding data
-          const [holding] = await tx
-            .select()
-            .from(shareHoldings)
-            .where(and(eq(shareHoldings.userId, userId), eq(shareHoldings.wordId, wordId)))
-            .for('update');
-          
-          if (!holding || holding.quantity < quantityNum) {
-            throw new Error(`You only own ${holding?.quantity || 0} shares`);
-          }
-          
-          // Calculate prices with locked data
-          const userBalance = parseFloat(user.wbBalance);
-          const currentPrice = parseFloat(word.currentPrice);
-          const pricePerShare = applySpread(currentPrice, false); // Sell at current price - 2% spread
-          const subtotal = pricePerShare * quantityNum;
-          const fee = calculateFee(subtotal);
-          const proceeds = subtotal - fee;
-          const newBalance = (userBalance + proceeds).toFixed(2);
-          
-          // Calculate new price after selling (price goes DOWN)
-          const newPrice = calculateNewPrice(word.sharesOutstanding, -quantityNum, word.totalShares);
-          
-          // Update user balance
-          await tx
-            .update(users)
-            .set({ wbBalance: newBalance, updatedAt: new Date() })
-            .where(eq(users.id, userId));
-          
-          // Update shares outstanding AND price
-          await tx
-            .update(words)
-            .set({ 
-              sharesOutstanding: word.sharesOutstanding - quantityNum,
-              currentPrice: newPrice.toFixed(2),
-              updatedAt: new Date()
-            })
-            .where(eq(words.id, wordId));
-          
-          // Update or delete shareholding
-          const newQuantity = holding.quantity - quantityNum;
-          if (newQuantity > 0) {
-            const costBasisPerShare = parseFloat(holding.costBasis) / holding.quantity;
-            const newCostBasis = (costBasisPerShare * newQuantity).toFixed(2);
-            await tx
-              .update(shareHoldings)
-              .set({ quantity: newQuantity, costBasis: newCostBasis, updatedAt: new Date() })
-              .where(eq(shareHoldings.id, holding.id));
-          } else {
-            await tx
-              .delete(shareHoldings)
-              .where(eq(shareHoldings.id, holding.id));
-          }
-          
-          // Create transaction record
-          const [transaction] = await tx
-            .insert(transactions)
-            .values({
-              userId,
-              wordId,
-              type: 'SELL',
-              quantity: quantityNum,
-              pricePerShare: pricePerShare.toFixed(2),
-              totalAmount: subtotal.toFixed(2),
-              fee: fee.toFixed(2),
-              balanceBefore: user.wbBalance,
-              balanceAfter: newBalance,
-              description: `Sold ${quantityNum} shares of ${word.textNormalized}`,
-            })
-            .returning();
-          
-          // Create receipt
-          await tx
-            .insert(receipts)
-            .values({
-              transactionId: transaction.id,
-              receiptData: generateReceiptData(transaction, word),
-            });
-          
-          return transaction;
-        });
-        
-        res.json({ success: true, transaction: result, receiptId: result.id });
-      }
+        }
+
+        const [trade] = await tx
+          .insert(trades)
+          .values({
+            wordId,
+            buyerId: userId,
+            sellerId: word.creatorId,
+            quantity,
+            price: currentIpoPrice.toFixed(2),
+            totalValue: totalValue.toFixed(2),
+            buyerFee: fee.toFixed(2),
+            sellerFee: '0.00',
+            isIpo: true,
+          })
+          .returning();
+
+        await tx
+          .insert(transactions)
+          .values({
+            userId,
+            wordId,
+            tradeId: trade.id,
+            type: 'IPO_BUY',
+            quantity,
+            pricePerShare: currentIpoPrice.toFixed(2),
+            totalAmount: `-${totalCost.toFixed(2)}`,
+            fee: fee.toFixed(2),
+            balanceBefore: user.wbBalance,
+            balanceAfter: newBalance,
+            description: `IPO purchase: ${quantity} shares of ${word.textNormalized} at ${currentIpoPrice.toFixed(2)} WB`,
+          });
+
+        return { trade, word };
+      });
+
+      res.json(result);
     } catch (error: any) {
-      console.error("Error executing trade:", error);
-      res.status(500).json({ message: error.message || "Failed to execute trade" });
+      console.error("Error buying IPO shares:", error);
+      res.status(500).json({ message: error.message || "Failed to buy IPO shares" });
     }
   });
 
-  // Get top words by intrinsic value
-  app.get('/api/words/top', isAuthenticated, async (req: any, res) => {
+  // Place order
+  app.post('/api/orders', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const topWords = await storage.getTopWords(20);
-      
-      // Enrich with user's shareholdings
-      const enrichedWords = await Promise.all(
-        topWords.map(async (word) => {
-          const holding = await storage.getShareHolding(userId, word.id);
-          return {
-            ...word,
-            userShares: holding?.quantity || 0,
-          };
-        })
-      );
-      
-      res.json(enrichedWords);
+      const { wordId, side, orderType, quantity, limitPrice } = req.body;
+
+      if (!wordId || !side || !orderType || !quantity) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      if (!['BUY', 'SELL'].includes(side)) {
+        return res.status(400).json({ message: "Side must be BUY or SELL" });
+      }
+
+      if (!['LIMIT', 'MARKET'].includes(orderType)) {
+        return res.status(400).json({ message: "Order type must be LIMIT or MARKET" });
+      }
+
+      if (orderType === 'LIMIT' && (!limitPrice || limitPrice <= 0)) {
+        return res.status(400).json({ message: "Limit price required for limit orders" });
+      }
+
+      if (quantity <= 0) {
+        return res.status(400).json({ message: "Quantity must be positive" });
+      }
+
+      const result = await db.transaction(async (tx) => {
+        const [word] = await tx
+          .select()
+          .from(words)
+          .where(eq(words.id, wordId))
+          .for('update');
+
+        if (!word) {
+          throw new Error("Word not found");
+        }
+
+        if (word.ipoStatus !== 'TRADING') {
+          throw new Error("Word is not trading yet. Wait for IPO to complete.");
+        }
+
+        const [user] = await tx
+          .select()
+          .from(users)
+          .where(eq(users.id, userId))
+          .for('update');
+
+        if (!user) {
+          throw new Error("User not found");
+        }
+
+        if (side === 'BUY') {
+          const estimatedPrice = orderType === 'MARKET' ? parseFloat(word.currentPrice) : limitPrice;
+          const estimatedCost = quantity * estimatedPrice + calculateTradingFee(quantity * estimatedPrice);
+          const balance = parseFloat(user.wbBalance);
+          
+          if (balance < estimatedCost) {
+            throw new Error(`Insufficient balance. Need approximately ${estimatedCost.toFixed(2)} WB`);
+          }
+        } else {
+          const [holding] = await tx
+            .select()
+            .from(holdings)
+            .where(and(eq(holdings.userId, userId), eq(holdings.wordId, wordId)))
+            .for('update');
+
+          if (!holding || holding.availableQuantity < quantity) {
+            throw new Error(`Insufficient shares. You have ${holding?.availableQuantity || 0} available.`);
+          }
+
+          await tx
+            .update(holdings)
+            .set({
+              availableQuantity: holding.availableQuantity - quantity,
+              lockedQuantity: holding.lockedQuantity + quantity,
+              updatedAt: new Date(),
+            })
+            .where(eq(holdings.id, holding.id));
+        }
+
+        const [order] = await tx
+          .insert(orders)
+          .values({
+            userId,
+            wordId,
+            side,
+            orderType,
+            quantity,
+            remainingQuantity: quantity,
+            limitPrice: limitPrice ? limitPrice.toFixed(2) : null,
+          })
+          .returning();
+
+        return { order };
+      });
+
+      // Try to match the order immediately
+      await matchOrders(wordId, result.order.id);
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error placing order:", error);
+      res.status(500).json({ message: error.message || "Failed to place order" });
+    }
+  });
+
+  // Cancel order
+  app.delete('/api/orders/:orderId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { orderId } = req.params;
+
+      await db.transaction(async (tx) => {
+        const [order] = await tx
+          .select()
+          .from(orders)
+          .where(eq(orders.id, orderId))
+          .for('update');
+
+        if (!order) {
+          throw new Error("Order not found");
+        }
+
+        if (order.userId !== userId) {
+          throw new Error("Unauthorized");
+        }
+
+        if (order.status === 'FILLED' || order.status === 'CANCELLED') {
+          throw new Error("Cannot cancel this order");
+        }
+
+        if (order.side === 'SELL' && order.remainingQuantity > 0) {
+          const [holding] = await tx
+            .select()
+            .from(holdings)
+            .where(and(eq(holdings.userId, userId), eq(holdings.wordId, order.wordId)))
+            .for('update');
+
+          if (holding) {
+            await tx
+              .update(holdings)
+              .set({
+                availableQuantity: holding.availableQuantity + order.remainingQuantity,
+                lockedQuantity: holding.lockedQuantity - order.remainingQuantity,
+                updatedAt: new Date(),
+              })
+              .where(eq(holdings.id, holding.id));
+          }
+        }
+
+        await tx
+          .update(orders)
+          .set({ status: 'CANCELLED', updatedAt: new Date() })
+          .where(eq(orders.id, orderId));
+      });
+
+      res.json({ message: "Order cancelled successfully" });
+    } catch (error: any) {
+      console.error("Error cancelling order:", error);
+      res.status(500).json({ message: error.message || "Failed to cancel order" });
+    }
+  });
+
+  // Get order book for a word
+  app.get('/api/words/:wordId/orderbook', async (req, res) => {
+    try {
+      const { wordId } = req.params;
+
+      const buyOrders = await storage.getOpenOrders(wordId, 'BUY');
+      const sellOrders = await storage.getOpenOrders(wordId, 'SELL');
+
+      const aggregateBids: { [price: string]: number } = {};
+      const aggregateAsks: { [price: string]: number } = {};
+
+      for (const order of buyOrders) {
+        const price = order.limitPrice || '0';
+        aggregateBids[price] = (aggregateBids[price] || 0) + order.remainingQuantity;
+      }
+
+      for (const order of sellOrders) {
+        const price = order.limitPrice || '0';
+        aggregateAsks[price] = (aggregateAsks[price] || 0) + order.remainingQuantity;
+      }
+
+      const bids = Object.entries(aggregateBids)
+        .map(([price, quantity]) => ({ price: parseFloat(price), quantity }))
+        .sort((a, b) => b.price - a.price);
+
+      const asks = Object.entries(aggregateAsks)
+        .map(([price, quantity]) => ({ price: parseFloat(price), quantity }))
+        .sort((a, b) => a.price - b.price);
+
+      res.json({ bids, asks });
     } catch (error) {
-      console.error("Error fetching top words:", error);
+      console.error("Error fetching order book:", error);
+      res.status(500).json({ message: "Failed to fetch order book" });
+    }
+  });
+
+  // Get my orders
+  app.get('/api/orders/my', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const myOrders = await storage.getUserOrders(userId);
+      res.json(myOrders);
+    } catch (error) {
+      console.error("Error fetching user orders:", error);
+      res.status(500).json({ message: "Failed to fetch orders" });
+    }
+  });
+
+  // Get all words (dictionary)
+  app.get('/api/dictionary', async (req, res) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = (page - 1) * limit;
+
+      const allWords = await storage.getAllWords(offset, limit);
+      res.json(allWords);
+    } catch (error) {
+      console.error("Error fetching dictionary:", error);
       res.status(500).json({ message: "Failed to fetch words" });
     }
   });
 
-  // Get trending words for ticker
-  app.get('/api/words/trending', async (req, res) => {
+  // Get all traders
+  app.get('/api/traders', async (req, res) => {
     try {
-      const trendingWords = await storage.getTopWords(10);
-      
-      // Calculate percentage change from last day of activity
-      // Look for transactions from yesterday (previous calendar day)
-      const enriched = await Promise.all(
-        trendingWords.map(async (word) => {
-          // Get start of today (midnight)
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          
-          // Get the most recent transaction from before today (yesterday or earlier)
-          const oldTransactions = await db
-            .select()
-            .from(transactions)
-            .where(
-              and(
-                eq(transactions.wordId, word.id),
-                sql`${transactions.type} IN ('BUY', 'SELL')`,
-                sql`${transactions.createdAt} < ${today}`
-              )
-            )
-            .orderBy(desc(transactions.createdAt))
-            .limit(1);
-          
-          let change24h = 0;
-          
-          if (oldTransactions.length > 0 && oldTransactions[0].pricePerShare) {
-            const oldPrice = parseFloat(oldTransactions[0].pricePerShare);
-            const currentPrice = parseFloat(word.currentPrice);
-            
-            if (oldPrice > 0) {
-              change24h = ((currentPrice - oldPrice) / oldPrice) * 100;
-            }
-          }
-          
-          return {
-            id: word.id,
-            textNormalized: word.textNormalized,
-            currentPrice: word.currentPrice,
-            change24h,
-          };
-        })
-      );
-      
-      res.json(enriched);
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = (page - 1) * limit;
+
+      const allTraders = await storage.getAllTraders(offset, limit);
+      res.json(allTraders);
     } catch (error) {
-      console.error("Error fetching trending words:", error);
-      res.status(500).json({ message: "Failed to fetch trending words" });
+      console.error("Error fetching traders:", error);
+      res.status(500).json({ message: "Failed to fetch traders" });
     }
   });
 
-  // Get user portfolio
-  app.get('/api/portfolio', isAuthenticated, async (req: any, res) => {
+  // Get top words (for dashboard)
+  app.get('/api/words/top', async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const holdings = await storage.getUserPortfolio(userId);
-      
-      const enriched = await Promise.all(
-        holdings.map(async (holding) => {
-          const word = await storage.getWord(holding.wordId);
-          if (!word) return null;
-          
-          const currentValue = parseFloat(word.currentPrice) * holding.quantity;
-          const costBasis = parseFloat(holding.costBasis);
-          const profitLoss = currentValue - costBasis;
-          const profitLossPercent = costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
-          
-          return {
-            word: {
-              id: word.id,
-              textNormalized: word.textNormalized,
-              currentPrice: word.currentPrice,
-            },
-            quantity: holding.quantity,
-            costBasis: holding.costBasis,
-            currentValue,
-            profitLoss,
-            profitLossPercent,
-          };
-        })
-      );
-      
-      res.json(enriched.filter(Boolean));
+      const limit = parseInt(req.query.limit as string) || 10;
+      const topWords = await storage.getTopWords(limit);
+      res.json(topWords);
     } catch (error) {
-      console.error("Error fetching portfolio:", error);
-      res.status(500).json({ message: "Failed to fetch portfolio" });
+      console.error("Error fetching top words:", error);
+      res.status(500).json({ message: "Failed to fetch top words" });
     }
   });
 
-  // Get leaderboard (sorted by total portfolio value)
+  // Get leaderboard (top traders)
   app.get('/api/leaderboard', async (req, res) => {
     try {
-      // Fetch all users with their holdings and word prices in a single efficient query
-      const allUsers = await db.select().from(users);
-      
-      // Fetch all holdings with word prices in one join query
-      const holdingsWithPrices = await db
-        .select({
-          userId: shareHoldings.userId,
-          quantity: shareHoldings.quantity,
-          currentPrice: words.currentPrice,
-        })
-        .from(shareHoldings)
-        .leftJoin(words, eq(shareHoldings.wordId, words.id));
-      
-      // Group holdings by userId and calculate total holdings value
-      const holdingsValueByUser = new Map<string, number>();
-      for (const holding of holdingsWithPrices) {
-        const currentValue = holdingsValueByUser.get(holding.userId) || 0;
-        const holdingValue = holding.quantity * parseFloat(holding.currentPrice || '0');
-        holdingsValueByUser.set(holding.userId, currentValue + holdingValue);
-      }
-      
-      // Calculate portfolio value for each user
-      const usersWithValue = allUsers.map((user) => {
-        const holdingsValue = holdingsValueByUser.get(user.id) || 0;
-        const cashBalance = parseFloat(user.wbBalance);
-        const totalValue = cashBalance + holdingsValue;
-        
-        return {
-          ...user,
-          portfolioValue: totalValue,
-          holdingsValue: holdingsValue,
-        };
-      });
-      
-      // Sort by portfolio value (numeric) and take top 10
-      const sorted = usersWithValue
-        .sort((a, b) => b.portfolioValue - a.portfolioValue)
-        .slice(0, 10)
-        .map((user, index) => ({
-          ...user,
-          portfolioValue: user.portfolioValue.toFixed(2),
-          holdingsValue: user.holdingsValue.toFixed(2),
-          rank: index + 1,
-        }));
-      
-      res.json(sorted);
+      const limit = parseInt(req.query.limit as string) || 10;
+      const topTraders = await storage.getTopTraders(limit);
+      res.json(topTraders);
     } catch (error) {
       console.error("Error fetching leaderboard:", error);
       res.status(500).json({ message: "Failed to fetch leaderboard" });
     }
   });
 
-  const httpServer = createServer(app);
-
-  // WebSocket for real-time updates - see blueprint javascript_websocket
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
-  
-  wss.on('connection', (ws: WebSocket) => {
-    console.log('WebSocket client connected');
-    
-    ws.on('close', () => {
-      console.log('WebSocket client disconnected');
-    });
+  // Get portfolio
+  app.get('/api/portfolio', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolio = await storage.getUserPortfolio(userId);
+      res.json(portfolio);
+    } catch (error) {
+      console.error("Error fetching portfolio:", error);
+      res.status(500).json({ message: "Failed to fetch portfolio" });
+    }
   });
 
+  // Get transactions
+  app.get('/api/transactions', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const txns = await storage.getUserTransactions(userId, limit);
+      res.json(txns);
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+      res.status(500).json({ message: "Failed to fetch transactions" });
+    }
+  });
+
+  // Get active IPOs
+  app.get('/api/ipos/active', async (req, res) => {
+    try {
+      const activeIpos = await storage.getActiveIpos();
+      res.json(activeIpos);
+    } catch (error) {
+      console.error("Error fetching active IPOs:", error);
+      res.status(500).json({ message: "Failed to fetch active IPOs" });
+    }
+  });
+
+  // Get word by ID
+  app.get('/api/words/:wordId', async (req, res) => {
+    try {
+      const { wordId } = req.params;
+      const word = await storage.getWord(wordId);
+      if (!word) {
+        return res.status(404).json({ message: "Word not found" });
+      }
+      res.json(word);
+    } catch (error) {
+      console.error("Error fetching word:", error);
+      res.status(500).json({ message: "Failed to fetch word" });
+    }
+  });
+
+  // Get trades for a word
+  app.get('/api/words/:wordId/trades', async (req, res) => {
+    try {
+      const { wordId } = req.params;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const wordTrades = await storage.getWordTrades(wordId, limit);
+      res.json(wordTrades);
+    } catch (error) {
+      console.error("Error fetching word trades:", error);
+      res.status(500).json({ message: "Failed to fetch trades" });
+    }
+  });
+
+  const httpServer = createServer(app);
   return httpServer;
+}
+
+// Order matching engine (simplified version)
+async function matchOrders(wordId: string, newOrderId: string) {
+  try {
+    const newOrder = await storage.getOrder(newOrderId);
+    if (!newOrder || newOrder.status === 'FILLED' || newOrder.status === 'CANCELLED') {
+      return;
+    }
+
+    const oppositeSide = newOrder.side === 'BUY' ? 'SELL' : 'BUY';
+    const oppositeOrders = await storage.getOpenOrders(wordId, oppositeSide);
+
+    for (const oppositeOrder of oppositeOrders) {
+      if (newOrder.remainingQuantity <= 0) {
+        break;
+      }
+
+      const canMatch = newOrder.orderType === 'MARKET' || oppositeOrder.orderType === 'MARKET' ||
+        (newOrder.side === 'BUY' && parseFloat(newOrder.limitPrice || '0') >= parseFloat(oppositeOrder.limitPrice || '0')) ||
+        (newOrder.side === 'SELL' && parseFloat(newOrder.limitPrice || '999999') <= parseFloat(oppositeOrder.limitPrice || '999999'));
+
+      if (!canMatch) {
+        continue;
+      }
+
+      const matchQuantity = Math.min(newOrder.remainingQuantity, oppositeOrder.remainingQuantity);
+      const matchPrice = parseFloat(oppositeOrder.limitPrice || newOrder.limitPrice || '0');
+
+      await executeTrade(newOrder, oppositeOrder, matchQuantity, matchPrice);
+
+      const updatedNewOrder = await storage.getOrder(newOrderId);
+      if (!updatedNewOrder || updatedNewOrder.remainingQuantity <= 0) {
+        break;
+      }
+      Object.assign(newOrder, updatedNewOrder);
+    }
+  } catch (error) {
+    console.error("Error matching orders:", error);
+  }
+}
+
+// Execute a trade between two orders
+async function executeTrade(buyOrder: any, sellOrder: any, quantity: number, price: number) {
+  await db.transaction(async (tx) => {
+    const totalValue = quantity * price;
+    const buyerFee = calculateTradingFee(totalValue);
+    const sellerFee = calculateTradingFee(totalValue);
+
+    const [buyer] = await tx.select().from(users).where(eq(users.id, buyOrder.userId)).for('update');
+    const [seller] = await tx.select().from(users).where(eq(users.id, sellOrder.userId)).for('update');
+    const [word] = await tx.select().from(words).where(eq(words.id, buyOrder.wordId)).for('update');
+
+    if (!buyer || !seller || !word) {
+      throw new Error("Missing buyer, seller, or word");
+    }
+
+    const buyerBalance = parseFloat(buyer.wbBalance);
+    const totalCost = totalValue + buyerFee;
+
+    if (buyerBalance < totalCost) {
+      throw new Error("Buyer insufficient balance");
+    }
+
+    const newBuyerBalance = (buyerBalance - totalCost).toFixed(2);
+    const sellerBalance = parseFloat(seller.wbBalance);
+    const sellerReceives = totalValue - sellerFee;
+    const newSellerBalance = (sellerBalance + sellerReceives).toFixed(2);
+
+    await tx.update(users).set({ wbBalance: newBuyerBalance, updatedAt: new Date() }).where(eq(users.id, buyer.id));
+    await tx.update(users).set({ wbBalance: newSellerBalance, updatedAt: new Date() }).where(eq(users.id, seller.id));
+
+    const [buyerHolding] = await tx.select().from(holdings).where(and(eq(holdings.userId, buyer.id), eq(holdings.wordId, word.id))).for('update');
+
+    if (buyerHolding) {
+      await tx.update(holdings).set({
+        quantity: buyerHolding.quantity + quantity,
+        availableQuantity: buyerHolding.availableQuantity + quantity,
+        updatedAt: new Date(),
+      }).where(eq(holdings.id, buyerHolding.id));
+    } else {
+      await tx.insert(holdings).values({
+        userId: buyer.id,
+        wordId: word.id,
+        quantity,
+        availableQuantity: quantity,
+        lockedQuantity: 0,
+        averageCost: price.toFixed(2),
+      });
+    }
+
+    const [sellerHolding] = await tx.select().from(holdings).where(and(eq(holdings.userId, seller.id), eq(holdings.wordId, word.id))).for('update');
+
+    if (sellerHolding) {
+      await tx.update(holdings).set({
+        quantity: sellerHolding.quantity - quantity,
+        lockedQuantity: sellerHolding.lockedQuantity - quantity,
+        updatedAt: new Date(),
+      }).where(eq(holdings.id, sellerHolding.id));
+    }
+
+    await tx.update(words).set({
+      lastTradePrice: price.toFixed(2),
+      currentPrice: price.toFixed(2),
+      tradeCount: word.tradeCount + 1,
+      updatedAt: new Date(),
+    }).where(eq(words.id, word.id));
+
+    const [trade] = await tx.insert(trades).values({
+      wordId: word.id,
+      buyerId: buyer.id,
+      sellerId: seller.id,
+      buyOrderId: buyOrder.id,
+      sellOrderId: sellOrder.id,
+      quantity,
+      price: price.toFixed(2),
+      totalValue: totalValue.toFixed(2),
+      buyerFee: buyerFee.toFixed(2),
+      sellerFee: sellerFee.toFixed(2),
+      isIpo: false,
+    }).returning();
+
+    await tx.insert(transactions).values({
+      userId: buyer.id,
+      wordId: word.id,
+      tradeId: trade.id,
+      type: 'BUY',
+      quantity,
+      pricePerShare: price.toFixed(2),
+      totalAmount: `-${totalCost.toFixed(2)}`,
+      fee: buyerFee.toFixed(2),
+      balanceBefore: buyer.wbBalance,
+      balanceAfter: newBuyerBalance,
+      description: `Bought ${quantity} shares of ${word.textNormalized} at ${price.toFixed(2)} WB`,
+    });
+
+    await tx.insert(transactions).values({
+      userId: seller.id,
+      wordId: word.id,
+      tradeId: trade.id,
+      type: 'SELL',
+      quantity,
+      pricePerShare: price.toFixed(2),
+      totalAmount: sellerReceives.toFixed(2),
+      fee: sellerFee.toFixed(2),
+      balanceBefore: seller.wbBalance,
+      balanceAfter: newSellerBalance,
+      description: `Sold ${quantity} shares of ${word.textNormalized} at ${price.toFixed(2)} WB`,
+    });
+
+    const newBuyRemaining = buyOrder.remainingQuantity - quantity;
+    const newBuyFilled = buyOrder.filledQuantity + quantity;
+    const newBuyStatus = newBuyRemaining <= 0 ? 'FILLED' : 'PARTIALLY_FILLED';
+
+    await tx.update(orders).set({
+      filledQuantity: newBuyFilled,
+      remainingQuantity: newBuyRemaining,
+      status: newBuyStatus,
+      updatedAt: new Date(),
+    }).where(eq(orders.id, buyOrder.id));
+
+    const newSellRemaining = sellOrder.remainingQuantity - quantity;
+    const newSellFilled = sellOrder.filledQuantity + quantity;
+    const newSellStatus = newSellRemaining <= 0 ? 'FILLED' : 'PARTIALLY_FILLED';
+
+    await tx.update(orders).set({
+      filledQuantity: newSellFilled,
+      remainingQuantity: newSellRemaining,
+      status: newSellStatus,
+      updatedAt: new Date(),
+    }).where(eq(orders.id, sellOrder.id));
+  });
 }
