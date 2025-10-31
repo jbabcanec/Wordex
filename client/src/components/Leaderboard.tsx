@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { formatWB } from "@/lib/utils";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Trophy, Medal, Award } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Trophy, Medal, Award, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface LeaderboardEntry {
@@ -78,7 +80,14 @@ export function Leaderboard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-display">Top Traders</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="font-display">Top 10 Traders</CardTitle>
+          <Link href="/traders">
+            <Button variant="ghost" size="sm" data-testid="button-browse-traders">
+              Browse All <ArrowRight className="h-4 w-4 ml-1" />
+            </Button>
+          </Link>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-2">

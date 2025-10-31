@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { formatWB } from "@/lib/utils";
+import { Link } from "wouter";
 import { StockTicker } from "@/components/StockTicker";
 import { SubmitWordModal } from "@/components/SubmitWordModal";
 import { WelcomeTour, useShouldShowTour } from "@/components/WelcomeTour";
@@ -10,6 +11,7 @@ import { Portfolio } from "@/components/Portfolio";
 import { Leaderboard } from "@/components/Leaderboard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { 
   TrendingUp, 
   Plus, 
@@ -18,6 +20,10 @@ import {
   Wallet,
   BarChart3,
   HelpCircle,
+  BookOpen,
+  Users,
+  ArrowRight,
+  Clock,
 } from "lucide-react";
 import type { Word } from "@shared/schema";
 
@@ -35,6 +41,11 @@ export default function Dashboard() {
   const { data: topWords, isLoading: topWordsLoading } = useQuery<WordWithHolding[]>({
     queryKey: ["/api/words/top"],
     refetchInterval: 10000,
+  });
+
+  const { data: activeIpos } = useQuery<Word[]>({
+    queryKey: ["/api/ipos/active"],
+    refetchInterval: 5000,
   });
 
   // Open tour when shouldShowTour becomes true
@@ -134,9 +145,9 @@ export default function Dashboard() {
                       Short the patriarchy. Long your vocabulary. Trade the zeitgeist.
                     </p>
                     <p className="text-sm sm:text-base text-foreground/80 mb-6 sm:mb-8">
-                      Be the first to list a word and claim your creator shares. 
-                      Every word starts with an intrinsic value of 1.00 WB and can grow 
-                      based on cultural events and social impact.
+                      Be the first to list a word and launch an IPO. Submit for 50 WB, 
+                      receive 20 creator shares that vest over 60 days, and watch traders 
+                      bid on your word's cultural value.
                     </p>
                     <Button
                       size="lg"
@@ -161,7 +172,7 @@ export default function Dashboard() {
                       <div className="space-y-1">
                         <h3 className="font-display font-semibold text-lg">Submit a Word</h3>
                         <p className="text-sm text-muted-foreground">
-                          List a new word for 10 WB and receive 50 shares
+                          Launch an IPO for 50 WB, receive 20 shares
                         </p>
                       </div>
                       <div className="p-3 rounded-md bg-primary/10">
@@ -192,10 +203,56 @@ export default function Dashboard() {
               </div>
             )}
 
+            {/* Active IPOs */}
+            {activeIpos && activeIpos.length > 0 && (
+              <Card className="border-2 border-blue-500/30 bg-blue-500/5">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-5 w-5 text-blue-500" />
+                      <CardTitle className="font-display">Active IPOs</CardTitle>
+                    </div>
+                    <Badge variant="secondary" className="bg-blue-500/20 text-blue-700 dark:text-blue-300">
+                      {activeIpos.length} Live
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {activeIpos.slice(0, 3).map((word) => (
+                      <WordCard
+                        key={word.id}
+                        word={word}
+                        userBalance={userBalance}
+                        userShares={0}
+                        compact={true}
+                      />
+                    ))}
+                    {activeIpos.length > 3 && (
+                      <Link href="/dictionary">
+                        <Button variant="outline" className="w-full" data-testid="button-view-all-ipos">
+                          <BookOpen className="h-4 w-4 mr-2" />
+                          View All IPOs
+                          <ArrowRight className="h-4 w-4 ml-2" />
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Top Power Words */}
             <Card>
               <CardHeader>
-                <CardTitle className="font-display">Top Power Words</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="font-display">Top 10 Words</CardTitle>
+                  <Link href="/dictionary">
+                    <Button variant="ghost" size="sm" data-testid="button-browse-words">
+                      Browse All <ArrowRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </Link>
+                </div>
               </CardHeader>
               <CardContent>
                 {topWordsLoading ? (

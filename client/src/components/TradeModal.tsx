@@ -1,21 +1,29 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { formatWB, calculateTradePrice, calculateFee } from "@/lib/utils";
-import { isUnauthorizedError } from "@/lib/authUtils";
+import { formatWB } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TrendingUp, TrendingDown, AlertCircle, Zap } from "lucide-react";
 
 interface TradeModalProps {
   open: boolean;
@@ -24,205 +32,409 @@ interface TradeModalProps {
     id: string;
     textNormalized: string;
     currentPrice: string;
-    sharesOutstanding: number;
+    outstandingShares?: number;
     totalShares: number;
   };
   userBalance: number;
   userShares: number;
 }
 
+interface OrderBookEntry {
+  price: string;
+  totalShares: number;
+}
+
+interface OrderBook {
+  bids: OrderBookEntry[];
+  asks: OrderBookEntry[];
+}
+
 export function TradeModal({ open, onOpenChange, word, userBalance, userShares }: TradeModalProps) {
-  const [quantity, setQuantity] = useState("");
-  const [activeTab, setActiveTab] = useState<"buy" | "sell">("buy");
+  const [orderType, setOrderType] = useState<"limit" | "market">("market");
+  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [shares, setShares] = useState("");
+  const [limitPrice, setLimitPrice] = useState("");
   const { toast } = useToast();
 
-  const tradeMutation = useMutation({
-    mutationFn: async (data: { wordId: string; quantity: number; action: "buy" | "sell" }) => {
-      return await apiRequest("POST", "/api/trade", data);
-    },
-    onSuccess: (data: any) => {
-      const receiptId = data?.receiptId || data?.transaction?.id || 'N/A';
-      toast({
-        title: "Trade Successful",
-        description: `Transaction completed. Receipt #${receiptId.toString().slice(0, 8)}`,
+  // Fetch order book
+  const { data: orderBook } = useQuery<OrderBook>({
+    queryKey: [`/api/words/${word.id}/orderbook`],
+    enabled: open,
+    refetchInterval: 5000,
+  });
+
+  const numShares = parseInt(shares) || 0;
+  const limitPriceNum = parseFloat(limitPrice) || 0;
+
+  // Calculate market order preview
+  const bestBid = orderBook?.bids?.[0]?.price ? parseFloat(orderBook.bids[0].price) : 0;
+  const bestAsk = orderBook?.asks?.[0]?.price ? parseFloat(orderBook.asks[0].price) : 0;
+  const spread = bestAsk && bestBid ? bestAsk - bestBid : 0;
+  const spreadPercent = bestBid > 0 ? (spread / bestBid) * 100 : 0;
+
+  const estimatedPrice = side === "buy" ? bestAsk : bestBid;
+  const estimatedCost = numShares * estimatedPrice;
+  const fee = estimatedCost * 0.005; // 0.5% fee
+  const totalCost = side === "buy" ? estimatedCost + fee : estimatedCost - fee;
+
+  const canAffordMarket = side === "buy" ? totalCost <= userBalance : numShares <= userShares;
+  const canAffordLimit = side === "buy" 
+    ? (numShares * limitPriceNum * 1.005) <= userBalance 
+    : numShares <= userShares;
+
+  const createOrderMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wordId: word.id,
+          side,
+          orderType,
+          shares: numShares,
+          limitPrice: orderType === "limit" ? limitPriceNum : undefined,
+        }),
+        credentials: "include",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/words/top"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/words/trending"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to create order");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      const { matched, order } = data;
+      if (matched && matched.length > 0) {
+        toast({
+          title: "Order Executed!",
+          description: `${side === "buy" ? "Bought" : "Sold"} ${matched.reduce((sum: number, m: any) => sum + m.shares, 0)} shares`,
+        });
+      } else if (order) {
+        toast({
+          title: "Order Placed",
+          description: `Limit ${side} order for ${numShares} shares at ${formatWB(limitPriceNum)} WB`,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/words"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portfolio"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
-      setQuantity("");
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/my"] });
+      setShares("");
+      setLimitPrice("");
       onOpenChange(false);
     },
     onError: (error: Error) => {
-      if (isUnauthorizedError(error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
-        return;
-      }
       toast({
-        title: "Trade Failed",
+        title: "Order Failed",
         description: error.message,
         variant: "destructive",
       });
     },
   });
 
-  const currentPrice = parseFloat(word.currentPrice);
-  const quantityNum = parseInt(quantity) || 0;
-  const isBuy = activeTab === "buy";
-  const pricePerShare = calculateTradePrice(currentPrice, isBuy);
-  const subtotal = pricePerShare * quantityNum;
-  const fee = calculateFee(subtotal);
-  const total = subtotal + fee;
+  const handleSubmit = () => {
+    if (numShares <= 0) {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a valid number of shares",
+        variant: "destructive",
+      });
+      return;
+    }
 
-  const availableShares = isBuy 
-    ? word.totalShares - word.sharesOutstanding // Platform's remaining shares
-    : userShares; // User's shares
+    if (orderType === "limit" && limitPriceNum <= 0) {
+      toast({
+        title: "Invalid Price",
+        description: "Please enter a valid limit price",
+        variant: "destructive",
+      });
+      return;
+    }
 
-  const canTrade = quantityNum > 0 && quantityNum <= availableShares && (!isBuy || total <= userBalance);
+    if (side === "buy" && orderType === "market" && !canAffordMarket) {
+      toast({
+        title: "Insufficient Funds",
+        description: "You don't have enough WB for this purchase",
+        variant: "destructive",
+      });
+      return;
+    }
 
-  const handleTrade = () => {
-    if (!canTrade) return;
-    tradeMutation.mutate({
-      wordId: word.id,
-      quantity: quantityNum,
-      action: activeTab,
-    });
+    if (side === "buy" && orderType === "limit" && !canAffordLimit) {
+      toast({
+        title: "Insufficient Funds",
+        description: "You don't have enough WB for this limit order",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (side === "sell" && numShares > userShares) {
+      toast({
+        title: "Insufficient Shares",
+        description: `You only have ${userShares} shares`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createOrderMutation.mutate();
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="modal-trade">
         <DialogHeader>
-          <DialogTitle className="font-display text-xl sm:text-2xl font-bold tracking-wide">
-            {word.textNormalized}
-          </DialogTitle>
-          <DialogDescription className="text-sm">
-            Current Price: {formatWB(currentPrice)} WB
-          </DialogDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <DialogTitle className="font-display text-2xl font-bold tracking-wide">
+                {word.textNormalized}
+              </DialogTitle>
+              <DialogDescription className="text-sm mt-1">
+                {(word.outstandingShares || 0).toLocaleString()} / {word.totalShares.toLocaleString()} shares outstanding
+              </DialogDescription>
+            </div>
+            {bestBid > 0 && bestAsk > 0 && (
+              <div className="text-right">
+                <div className="text-xs text-muted-foreground">Spread</div>
+                <div className="font-mono font-semibold text-sm">
+                  {formatWB(spread)} <span className="text-xs text-muted-foreground">({spreadPercent.toFixed(2)}%)</span>
+                </div>
+              </div>
+            )}
+          </div>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "buy" | "sell")} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="buy" data-testid="tab-buy">Buy</TabsTrigger>
-            <TabsTrigger value="sell" data-testid="tab-sell">Sell</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="buy" className="space-y-3 sm:space-y-4 mt-4 sm:mt-6">
-            <div className="space-y-2 sm:space-y-3">
-              <Label htmlFor="buy-quantity" className="text-sm">Quantity (shares)</Label>
-              <Input
-                id="buy-quantity"
-                type="number"
-                min="1"
-                max={availableShares}
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                placeholder="0"
-                className="font-mono text-base sm:text-lg"
-                data-testid="input-quantity"
-              />
-              <div className="text-xs text-muted-foreground">
-                Available from platform: {availableShares.toLocaleString()} shares
-              </div>
-            </div>
-
-            <div className="rounded-md bg-muted/30 p-3 sm:p-4 space-y-2">
-              <div className="flex justify-between text-xs sm:text-sm">
-                <span className="text-muted-foreground">Price per share</span>
-                <span className="font-mono">{formatWB(pricePerShare)} WB</span>
-              </div>
-              <div className="flex justify-between text-xs sm:text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
-                <span className="font-mono">{formatWB(subtotal)} WB</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Fee (0.5%)</span>
-                <span className="font-mono">{formatWB(fee)} WB</span>
-              </div>
-              <div className="border-t pt-2 mt-2">
-                <div className="flex justify-between font-medium">
-                  <span>Total Cost</span>
-                  <span className="font-mono text-lg">{formatWB(total)} WB</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Order Book */}
+          <div className="space-y-3">
+            <h3 className="font-semibold text-sm flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Order Book
+            </h3>
+            
+            <div className="border rounded-md overflow-hidden">
+              {/* Asks (Sell Orders) */}
+              <div className="bg-red-500/5 p-2 space-y-0.5 max-h-32 overflow-y-auto">
+                <div className="text-xs font-semibold text-red-600 dark:text-red-400 mb-1 flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3" />
+                  Asks (Sellers)
                 </div>
+                {orderBook?.asks && orderBook.asks.length > 0 ? (
+                  orderBook.asks.slice(0, 5).reverse().map((ask, i) => (
+                    <div key={i} className="flex justify-between text-xs font-mono">
+                      <span className="text-red-600 dark:text-red-400">{formatWB(ask.price)}</span>
+                      <span className="text-muted-foreground">{ask.totalShares}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-xs text-muted-foreground">No sell orders</div>
+                )}
               </div>
-              <div className="text-xs text-muted-foreground mt-2">
-                Your balance: {formatWB(userBalance)} WB
-              </div>
-            </div>
-          </TabsContent>
 
-          <TabsContent value="sell" className="space-y-4 mt-6">
-            <div className="space-y-3">
-              <Label htmlFor="sell-quantity">Quantity (shares)</Label>
-              <Input
-                id="sell-quantity"
-                type="number"
-                min="1"
-                max={availableShares}
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                placeholder="0"
-                className="font-mono text-lg"
-                data-testid="input-quantity"
-              />
-              <div className="text-xs text-muted-foreground">
-                You own: {userShares.toLocaleString()} shares
+              {/* Current Price */}
+              <div className="bg-muted/50 p-2 border-y">
+                <div className="text-xs text-muted-foreground mb-0.5">Last Price</div>
+                <div className="font-mono font-bold text-lg">{formatWB(word.currentPrice)}</div>
               </div>
-            </div>
 
-            <div className="rounded-md bg-muted/30 p-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Price per share</span>
-                <span className="font-mono">{formatWB(pricePerShare)} WB</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
-                <span className="font-mono">{formatWB(subtotal)} WB</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Fee (0.5%)</span>
-                <span className="font-mono">-{formatWB(fee)} WB</span>
-              </div>
-              <div className="border-t pt-2 mt-2">
-                <div className="flex justify-between font-medium">
-                  <span>You Receive</span>
-                  <span className="font-mono text-lg text-gain">+{formatWB(subtotal - fee)} WB</span>
+              {/* Bids (Buy Orders) */}
+              <div className="bg-green-500/5 p-2 space-y-0.5 max-h-32 overflow-y-auto">
+                <div className="text-xs font-semibold text-green-600 dark:text-green-400 mb-1 flex items-center gap-1">
+                  <TrendingDown className="h-3 w-3" />
+                  Bids (Buyers)
                 </div>
+                {orderBook?.bids && orderBook.bids.length > 0 ? (
+                  orderBook.bids.slice(0, 5).map((bid, i) => (
+                    <div key={i} className="flex justify-between text-xs font-mono">
+                      <span className="text-green-600 dark:text-green-400">{formatWB(bid.price)}</span>
+                      <span className="text-muted-foreground">{bid.totalShares}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-xs text-muted-foreground">No buy orders</div>
+                )}
               </div>
             </div>
-          </TabsContent>
-        </Tabs>
+          </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            data-testid="button-cancel-trade"
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleTrade}
-            disabled={!canTrade || tradeMutation.isPending}
-            data-testid="button-confirm-trade"
-          >
-            {tradeMutation.isPending 
-              ? "Processing..." 
-              : isBuy 
-                ? `Buy ${quantityNum || 0} Shares` 
-                : `Sell ${quantityNum || 0} Shares`
-            }
-          </Button>
-        </DialogFooter>
+          {/* Order Form */}
+          <div className="space-y-4">
+            <Tabs value={side} onValueChange={(v) => setSide(v as "buy" | "sell")}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="buy" className="data-[state=active]:bg-green-600 data-[state=active]:text-white" data-testid="tab-buy">
+                  Buy
+                </TabsTrigger>
+                <TabsTrigger value="sell" className="data-[state=active]:bg-red-600 data-[state=active]:text-white" data-testid="tab-sell">
+                  Sell
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value={side} className="space-y-4 mt-4">
+                {/* Order Type */}
+                <div className="space-y-2">
+                  <Label>Order Type</Label>
+                  <Select value={orderType} onValueChange={(v) => setOrderType(v as "limit" | "market")}>
+                    <SelectTrigger data-testid="select-order-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="market">
+                        <div className="flex items-center gap-2">
+                          <Zap className="h-3 w-3" />
+                          Market Order
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="limit">Limit Order</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Shares */}
+                <div className="space-y-2">
+                  <Label htmlFor="shares">Shares</Label>
+                  <Input
+                    id="shares"
+                    type="number"
+                    min="1"
+                    placeholder="Enter shares"
+                    value={shares}
+                    onChange={(e) => setShares(e.target.value)}
+                    className="font-mono"
+                    data-testid="input-shares"
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    {side === "buy" ? `Balance: ${formatWB(userBalance)} WB` : `You have: ${userShares} shares`}
+                  </div>
+                </div>
+
+                {/* Limit Price (only for limit orders) */}
+                {orderType === "limit" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="limit-price">Limit Price (per share)</Label>
+                    <Input
+                      id="limit-price"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      placeholder="Enter price"
+                      value={limitPrice}
+                      onChange={(e) => setLimitPrice(e.target.value)}
+                      className="font-mono"
+                      data-testid="input-limit-price"
+                    />
+                  </div>
+                )}
+
+                {/* Order Preview */}
+                {numShares > 0 && (
+                  <div className="p-3 rounded-md bg-muted/50 border space-y-2">
+                    <div className="text-xs font-semibold">Order Summary</div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        {orderType === "market" ? "Est. Price" : "Limit Price"}
+                      </span>
+                      <span className="font-mono">
+                        {orderType === "market" ? formatWB(estimatedPrice) : formatWB(limitPriceNum)} WB
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Shares</span>
+                      <span className="font-mono">{numShares}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span className="font-mono">
+                        {orderType === "market" ? formatWB(estimatedCost) : formatWB(numShares * limitPriceNum)} WB
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Fee (0.5%)</span>
+                      <span className="font-mono">{formatWB(fee)} WB</span>
+                    </div>
+                    <div className="border-t pt-2 flex justify-between font-semibold">
+                      <span>Total</span>
+                      <span className="font-mono text-lg">
+                        {side === "buy" ? "+" : "-"}{formatWB(Math.abs(totalCost))} WB
+                      </span>
+                    </div>
+
+                    {orderType === "market" && (side === "buy" ? !bestAsk : !bestBid) && (
+                      <Alert className="bg-yellow-500/10 border-yellow-500/30">
+                        <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-500" />
+                        <AlertDescription className="text-xs">
+                          No {side === "buy" ? "sellers" : "buyers"} available. Place a limit order instead.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {orderType === "limit" && (
+                      <Alert className="bg-blue-500/10 border-blue-500/30">
+                        <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-500" />
+                        <AlertDescription className="text-xs">
+                          Limit order will execute when a matching {side === "buy" ? "seller" : "buyer"} is found.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => onOpenChange(false)}
+                    className="flex-1"
+                    data-testid="button-cancel"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={
+                      createOrderMutation.isPending ||
+                      numShares <= 0 ||
+                      (orderType === "limit" && limitPriceNum <= 0) ||
+                      (orderType === "market" && !canAffordMarket) ||
+                      (orderType === "limit" && !canAffordLimit)
+                    }
+                    className={side === "buy" ? "flex-1 bg-green-600 hover:bg-green-700" : "flex-1 bg-red-600 hover:bg-red-700"}
+                    data-testid="button-submit-order"
+                  >
+                    {createOrderMutation.isPending
+                      ? "Processing..."
+                      : orderType === "market"
+                      ? `${side === "buy" ? "Buy" : "Sell"} Now`
+                      : `Place ${side === "buy" ? "Buy" : "Sell"} Order`}
+                  </Button>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function BarChart3({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M3 3v18h18" />
+      <path d="M18 17V9" />
+      <path d="M13 17V5" />
+      <path d="M8 17v-3" />
+    </svg>
   );
 }

@@ -32,11 +32,12 @@ export function SubmitWordModal({ open, onOpenChange }: SubmitWordModalProps) {
     },
     onSuccess: () => {
       toast({
-        title: "Word Submitted!",
-        description: "Your word has been listed. You received 50 shares as the creator.",
+        title: "IPO Launched!",
+        description: "Your word is now in a 24-hour Dutch auction. You'll receive 20 creator shares that vest over 60 days.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/words/top"] });
       queryClient.invalidateQueries({ queryKey: ["/api/words/trending"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ipos/active"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portfolio"] });
       setWordInput("");
@@ -63,7 +64,7 @@ export function SubmitWordModal({ open, onOpenChange }: SubmitWordModalProps) {
   });
 
   const normalizedWord = normalizeWord(wordInput);
-  const costInWB = 10;
+  const costInWB = 50;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,14 +125,17 @@ export function SubmitWordModal({ open, onOpenChange }: SubmitWordModalProps) {
               <span className="font-mono font-medium">-{costInWB}.00 WB</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Creator Shares</span>
-              <span className="font-mono font-medium text-gain">+50 shares</span>
+              <span className="text-muted-foreground">Creator Shares (Vesting)</span>
+              <span className="font-mono font-medium text-gain">+20 shares</span>
             </div>
             <div className="border-t pt-2 mt-2">
               <div className="flex justify-between text-sm font-medium">
-                <span>Initial Share Value</span>
-                <span className="font-mono">1,000 shares @ 1.00 WB</span>
+                <span>IPO Details</span>
+                <span className="font-mono">980 shares @ $2.00→$0.10</span>
               </div>
+            </div>
+            <div className="text-xs text-muted-foreground mt-2">
+              24-hour Dutch auction. Your 20 shares vest over 60 days.
             </div>
           </div>
 

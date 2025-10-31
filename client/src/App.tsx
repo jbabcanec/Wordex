@@ -6,18 +6,26 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
+import Dictionary from "@/pages/dictionary";
+import Traders from "@/pages/traders";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
 
+  if (isLoading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
+  if (!isAuthenticated) {
+    return <Route path="/" component={Landing} />;
+  }
+
   return (
     <Switch>
-      {isLoading || !isAuthenticated ? (
-        <Route path="/" component={Landing} />
-      ) : (
-        <Route path="/" component={Dashboard} />
-      )}
+      <Route path="/" component={Dashboard} />
+      <Route path="/dictionary" component={Dictionary} />
+      <Route path="/traders" component={Traders} />
       <Route component={NotFound} />
     </Switch>
   );
