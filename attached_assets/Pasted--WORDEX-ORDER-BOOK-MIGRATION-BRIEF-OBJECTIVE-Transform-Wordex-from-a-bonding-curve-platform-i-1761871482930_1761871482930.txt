@@ -1,0 +1,984 @@
+# WORDEX: ORDER BOOK MIGRATION BRIEF
+
+## OBJECTIVE
+
+Transform Wordex from a bonding curve platform into a peer-to-peer order book trading system.
+
+**Why**: Current system has mathematical exploits that cannot be fixed:
+- Pump & dump yields guaranteed 8.46% profit
+- Spam words are instantly profitable (get 5,000 shares worth $5,000 for 10 WB fee)
+- Platform acts as counterparty (infinite liquidity risk)
+
+**Solution**: Order book system where users trade with each other. Spam becomes unprofitable because there are no buyers.
+
+---
+
+## CORE CHANGES
+
+### Economic Parameters
+| Parameter | Current | New | Reason |
+|-----------|---------|-----|--------|
+| Shares per word | 100,000 | 1,000 | More sensible scale |
+| Creator allocation | 5,000 shares (5%) | 20 shares (2%) | Prevents instant dump |
+| Submission fee | 10 WB | 50 WB | Spam prevention |
+| Creator shares | Instant | 60-day vesting | Aligns incentives |
+| Trading mechanism | Bonding curve | Order book | Un-exploitable |
+
+### New Systems to Build
+1. **IPO System**: 24-hour Dutch auction for new words (price drops from $2.00 → $0.10)
+2. **Order Book**: Peer-to-peer limit/market orders with matching engine
+3. **Vesting**: Creator shares unlock gradually (0% → 20% → 40% → 70% → 100% over 60 days)
+
+---
+
+## DATABASE MIGRATION
+
+**CRITICAL DECISION**: Choose Option A (Clean Slate) OR Option B (Migrate Existing Data)
+
+---
+
+### OPTION A: CLEAN SLATE (Recommended for Development)
+
+**When to use**: Development/testing environment, or if you want fresh start
+
+**Steps**:
+
+1. **Drop receipts table** (no longer needed):
+```sql
+DROP TABLE receipts CASCADE;
+```
+
+2. **Truncate all data** (keep users):
+```sql
+TRUNCATE TABLE transactions CASCADE;
+TRUNCATE TABLE holdings CASCADE;
+TRUNCATE TABLE words CASCADE;
+```
+
+3. **Reset user balances** (optional - gives everyone fresh start):
+```sql
+UPDATE users SET wb_balance = 10000;
+```
+
+4. Continue to "Schema Changes" section below
+
+---
+
+### OPTION B: MIGRATE EXISTING DATA (Keep Words & Holdings)
+
+**When to use**: Production environment where you want to preserve existing words/balances
+
+**⚠️ WARNING**: This rescales ALL existing data. Backup database first!
+
+**Migration Steps**:
+
+#### Step B1: Add New Schema Fields BEFORE Migration
+
+First, add all new fields to existing tables (see "Schema Changes" section below). This must happen BEFORE running migration SQL.
+
+#### Step B2: Run Migration SQL
+
+**Critical conversions**:
+- 100,000 shares → 1,000 shares (divide by 100)
+- 5,000 creator shares → 20 creator shares (divide by 250)
+- Existing prices stay the same (already in WB)
+
+**SQL Migration Script**:
+
+```sql
+-- ============================================================================
+-- PART 1: Migrate WORDS table
+-- ============================================================================
+
+-- Update all existing words
+UPDATE words
+SET
+  -- Rescale share counts
+  totalShares = 1000,
+  creatorShares = 20,
+  outstandingShares = LEAST(1000, FLOOR(sharesOwned / 100)),  -- Scale down existing ownership
+
+  -- Set to TRADING status (skip IPO for existing words)
+  ipoStatus = 'TRADING',
+  ipoSharesSold = 980,  -- Mark IPO as completed
+
+  -- Keep existing price (it's already in WB, so no conversion needed)
+  lastTradePrice = currentPrice,
+
+  -- Calculate market cap with new share count
+  marketCap = currentPrice * 1000,
+
+  -- Reset volume/trade stats
+  volume24h = 0,
+  tradeCount = 0;
+
+-- Remove old sharesOwned field (if it exists)
+-- This happens after schema update adds new fields
+
+-- ============================================================================
+-- PART 2: Migrate HOLDINGS table
+-- ============================================================================
+
+-- Rescale all user holdings (divide by 100)
+UPDATE holdings
+SET
+  quantity = GREATEST(1, FLOOR(quantity / 100)),  -- Minimum 1 share
+  availableQuantity = GREATEST(1, FLOOR(quantity / 100)),  -- All available (no vesting for existing)
+  lockedQuantity = 0;  -- Nothing locked for existing holdings
+
+-- Delete holdings that round down to 0 shares
+DELETE FROM holdings WHERE quantity = 0;
+
+-- ============================================================================
+-- PART 3: Handle Creator Shares
+-- ============================================================================
+
+-- Find all words and their creators
+-- For each word, ensure creator has exactly 20 shares (2%)
+
+-- Option 1: Update creator holdings to 20 shares
+UPDATE holdings h
+SET
+  quantity = 20,
+  availableQuantity = 20,  -- Give them available immediately (no vesting for existing)
+  lockedQuantity = 0
+FROM words w
+WHERE h.word_id = w.id
+  AND h.user_id = w.creator_id;
+
+-- Option 2: Create creator holdings if they don't exist
+INSERT INTO holdings (user_id, word_id, quantity, available_quantity, locked_quantity, average_cost)
+SELECT
+  w.creator_id,
+  w.id,
+  20,
+  20,
+  0,
+  '0.00'
+FROM words w
+WHERE NOT EXISTS (
+  SELECT 1 FROM holdings h
+  WHERE h.word_id = w.id
+    AND h.user_id = w.creator_id
+);
+
+-- ============================================================================
+-- PART 4: Recalculate User Balances (Optional)
+-- ============================================================================
+
+-- This section is OPTIONAL - only if you want to ensure balances are accurate
+-- after rescaling
+
+-- Calculate total portfolio value for each user
+WITH portfolio_values AS (
+  SELECT
+    h.user_id,
+    SUM(h.quantity * w.current_price::numeric) as portfolio_value
+  FROM holdings h
+  JOIN words w ON h.word_id = w.id
+  GROUP BY h.user_id
+)
+-- You can use this to verify balances look reasonable
+SELECT * FROM portfolio_values ORDER BY portfolio_value DESC LIMIT 20;
+
+-- ============================================================================
+-- PART 5: Clean Up Transactions (Optional)
+-- ============================================================================
+
+-- Option 1: Keep transactions for historical record but they reference old scale
+-- (Do nothing - transactions are historical)
+
+-- Option 2: Clear transactions to start fresh with new system
+-- TRUNCATE TABLE transactions;
+
+-- ============================================================================
+-- PART 6: Validation Queries
+-- ============================================================================
+
+-- Verify migration worked correctly:
+
+-- Check all words have correct share structure
+SELECT
+  display_text,
+  total_shares,
+  creator_shares,
+  outstanding_shares,
+  ipo_status
+FROM words
+WHERE total_shares != 1000
+   OR creator_shares != 20
+   OR ipo_status != 'TRADING';
+-- Should return 0 rows
+
+-- Check holdings are reasonable (no fractional shares)
+SELECT * FROM holdings WHERE quantity < 1;
+-- Should return 0 rows
+
+-- Check creator holdings
+SELECT
+  w.display_text,
+  u.username as creator,
+  h.quantity as creator_shares,
+  h.available_quantity
+FROM words w
+JOIN users u ON w.creator_id = u.id
+LEFT JOIN holdings h ON h.word_id = w.id AND h.user_id = w.creator_id
+WHERE h.quantity != 20 OR h.quantity IS NULL;
+-- Should return 0 rows (all creators have exactly 20 shares)
+
+-- Check total shares per word
+SELECT
+  w.display_text,
+  w.total_shares,
+  SUM(h.quantity) as total_held,
+  w.total_shares - COALESCE(SUM(h.quantity), 0) as unissued
+FROM words w
+LEFT JOIN holdings h ON h.word_id = w.id
+GROUP BY w.id, w.display_text, w.total_shares
+HAVING SUM(h.quantity) > 1000;
+-- Should return 0 rows (no word has more than 1000 shares issued)
+```
+
+#### Step B3: Verify Migration Success
+
+After running migration SQL, check:
+
+1. **All words have 1,000 total shares**: `SELECT * FROM words WHERE totalShares != 1000`
+2. **All words are in TRADING status**: `SELECT * FROM words WHERE ipoStatus != 'TRADING'`
+3. **No fractional shares**: `SELECT * FROM holdings WHERE quantity < 1`
+4. **Creators have 20 shares**: Check each word's creator has holding
+5. **No exploits remain**:
+   - No bonding curve code exists (deleted routes)
+   - No instant dumps possible (order book requires buyers)
+   - Shares properly distributed
+
+#### Step B4: Handle Edge Cases
+
+**If some users had MASSIVE holdings** (e.g., 50,000 shares):
+- After division by 100: 500 shares
+- This is FINE - they just own 50% of that word
+- Market will price it appropriately via order book
+
+**If some holdings round to 0**:
+- Delete those holdings (migration SQL already does this)
+- User loses those shares (they were fractional anyway)
+
+**If creator no longer owns shares**:
+- Migration creates 20 shares for them
+- Sets all as available (no vesting for existing)
+
+---
+
+### POST-MIGRATION: Ensuring No Exploits Remain
+
+After migrating existing data, you MUST verify the system is no longer exploitable:
+
+#### Checklist: Exploit Prevention
+
+1. **Bonding Curve DELETED**:
+   - [ ] `POST /api/words/:wordId/buy` route deleted
+   - [ ] `POST /api/words/:wordId/sell` route deleted
+   - [ ] `calculatePrice()` function deleted
+   - [ ] No code references `sharesOwned` field
+
+2. **All Words Set to TRADING**:
+   - [ ] Run: `SELECT * FROM words WHERE ipoStatus != 'TRADING'`
+   - [ ] Should return 0 rows (all existing words skip IPO, go straight to trading)
+
+3. **Order Book Active**:
+   - [ ] New routes exist: `POST /api/orders`, `GET /api/words/:wordId/orderbook`
+   - [ ] Test: Place a sell order → requires a buyer to match
+   - [ ] Test: No instant dumps possible (need matching buy order)
+
+4. **Proper Share Distribution**:
+   - [ ] No word has >1000 shares total
+   - [ ] All holdings properly rescaled (divided by 100)
+   - [ ] Creators have exactly 20 shares each
+
+5. **No Residual Vulnerabilities**:
+   - [ ] Platform no longer acts as counterparty
+   - [ ] Users can only trade with other users
+   - [ ] Spam words (if any exist) have no buyers → cannot be sold
+   - [ ] Prices determined by last trade, not formula
+
+#### Test: Verify Exploit is Fixed
+
+**Old System (SHOULD NO LONGER WORK)**:
+```
+1. Buy 95,000 shares → price pumps to $1.50
+2. Sell all 95,000 shares at $1.50 to platform
+3. Profit: 8.46%
+```
+
+**New System (CORRECT BEHAVIOR)**:
+```
+1. Place buy order for 950 shares at $1.50
+2. Order goes to order book
+3. Only executes if another user places matching sell order
+4. Can't pump & dump because:
+   - Need real sellers to buy from
+   - Need real buyers to dump to
+   - Platform doesn't participate
+```
+
+#### What Happens to Existing "Spam" Words After Migration?
+
+If spam words exist in database after migration:
+- They have 1000 shares total
+- Creator has 20 shares (all available)
+- Other users may have shares (rescaled)
+- **Key difference**: Creator cannot dump because:
+  - No bonding curve to dump to
+  - Must find buyers on order book
+  - If word is spam, there are no buyers
+  - Shares are illiquid = worthless
+
+This is CORRECT behavior. Spam should be worthless.
+
+---
+
+### Understanding Portfolio Value After Migration
+
+**IMPORTANT**: Share counts change, but portfolio VALUES stay roughly the same.
+
+#### Example Migration:
+
+**Before Migration**:
+- Word "INNOVATION" has price = $1.50
+- User owns 5,000 shares
+- Portfolio value = 5,000 × $1.50 = **$7,500**
+
+**After Migration** (divide shares by 100, keep price):
+- Word "INNOVATION" has price = $1.50 (unchanged)
+- User owns 50 shares (5,000 ÷ 100)
+- Portfolio value = 50 × $1.50 = **$75**
+
+**Wait, that's wrong!** We need to adjust prices too.
+
+#### Correct Migration (if needed):
+
+**Option 1**: Keep prices, rescale shares (simple)
+- Shares: 5,000 → 50
+- Price: $1.50 → $1.50
+- Value: $7,500 → $75 ❌ (loses value)
+
+**Option 2**: Rescale shares AND prices proportionally
+- Shares: 5,000 → 50 (÷100)
+- Price: $1.50 → $150 (×100)
+- Value: $7,500 → $7,500 ✓ (preserves value)
+
+#### Recommendation for Migration:
+
+**If you want to preserve portfolio values**, update migration SQL Part 1 to also multiply prices by 100:
+
+```sql
+UPDATE words
+SET
+  totalShares = 1000,
+  creatorShares = 20,
+  outstandingShares = LEAST(1000, FLOOR(sharesOwned / 100)),
+  ipoStatus = 'TRADING',
+  ipoSharesSold = 980,
+
+  -- MULTIPLY PRICE BY 100 to preserve value
+  currentPrice = currentPrice * 100,
+  lastTradePrice = currentPrice * 100,
+  marketCap = (currentPrice * 100) * 1000,
+
+  volume24h = 0,
+  tradeCount = 0;
+```
+
+**OR, if you want fresh market prices**, keep prices as-is and let the market re-discover true value via order book.
+
+#### Our Recommendation:
+
+**Keep prices as-is, let market re-price**. Here's why:
+- Old prices were from exploitable bonding curve
+- New prices from real supply/demand are more accurate
+- Users will adjust to new scale quickly
+- Market will find true value in days
+
+**But**: Inform users that share counts are different (divided by 100) but their ownership % is the same.
+
+---
+
+### Schema Changes (Required for BOTH Options)
+
+**`words` table** - Add these fields:
+- `totalShares` (integer, default 1000)
+- `creatorShares` (integer, default 20)
+- `outstandingShares` (integer, default 0)
+- `ipoStatus` (varchar, values: 'PENDING_IPO', 'IPO_ACTIVE', 'TRADING', 'IPO_FAILED')
+- `ipoStartPrice` (decimal, default 2.00)
+- `ipoCurrentPrice` (decimal, default 2.00)
+- `ipoEndPrice` (decimal, default 0.10)
+- `ipoSharesOffered` (integer, default 980)
+- `ipoSharesSold` (integer, default 0)
+- `ipoStartedAt` (timestamp)
+- `ipoEndsAt` (timestamp)
+- `lastTradePrice` (decimal)
+- `marketCap` (decimal)
+- `volume24h` (integer)
+- `tradeCount` (integer)
+
+**`words` table** - Remove these fields:
+- `sharesOwned` (replaced by order book system)
+
+**`holdings` table** - Add these fields:
+- `availableQuantity` (integer) - shares that can be traded
+- `lockedQuantity` (integer) - shares locked in orders or vesting
+
+**CREATE** new table: `orders`
+- Track buy/sell limit/market orders
+- Fields: id, userId, wordId, side ('BUY'/'SELL'), orderType ('LIMIT'/'MARKET'), quantity, filled, remaining, limitPrice, status ('OPEN'/'FILLED'/'CANCELLED'), timestamps
+
+**CREATE** new table: `trades`
+- Track executed trades between users
+- Fields: id, wordId, buyerId, sellerId, buyOrderId, sellOrderId, quantity, price, totalValue, buyerFee, sellerFee, isIpo (boolean), createdAt
+
+**CREATE** new table: `vestingSchedules`
+- Track creator share vesting
+- Fields: id, userId, wordId, totalShares, unlockedShares, schedule (jsonb), timestamps
+
+---
+
+## BACKEND DEPRECATIONS
+
+### Delete These Routes
+- `POST /api/words/:wordId/buy` (old bonding curve buy)
+- `POST /api/words/:wordId/sell` (old bonding curve sell)
+
+### Delete These Functions
+- `calculatePrice()` - bonding curve formula
+- `getMarketPrice()` - bonding curve pricing
+
+### Delete/Update Code References
+- Any code referencing `sharesOwned` field
+- Any code referencing `receipts` table
+
+---
+
+## NEW BACKEND REQUIREMENTS
+
+### File 1: `shared/constants.ts` (NEW)
+Create economy configuration constants:
+- SUBMISSION_FEE = 50
+- SHARES_PER_WORD = 1000
+- CREATOR_SHARES = 20
+- IPO_SHARES = 980
+- TRADING_FEE_PERCENT = 0.005 (0.5%)
+- IPO_START_PRICE = 2.00
+- IPO_END_PRICE = 0.10
+- IPO_DURATION_HOURS = 24
+- VESTING_SCHEDULE = [{day: 0, percent: 0}, {day: 7, percent: 0.2}, {day: 14, percent: 0.4}, {day: 30, percent: 0.7}, {day: 60, percent: 1.0}]
+
+### File 2: `server/word-creation.ts` (NEW)
+
+**Function: createWord(userId, text)**
+- Charge 50 WB submission fee
+- Create word with ipoStatus = 'IPO_ACTIVE'
+- Set IPO duration to 24 hours
+- Give creator 20 shares (all locked)
+- Create vesting schedule entry
+- Create holding entry with availableQuantity=0, lockedQuantity=20
+
+**Function: buyIpoShares(userId, wordId, quantity)**
+- Check word.ipoStatus === 'IPO_ACTIVE'
+- Charge current IPO price (word.ipoCurrentPrice)
+- Charge 0.5% trading fee
+- Add shares to user's holdings (availableQuantity)
+- Increment word.ipoSharesSold
+- Create trade record with isIpo=true
+- If all IPO shares sold, set ipoStatus = 'TRADING'
+
+**Function: updateIpoPrices()** (run hourly via cron)
+- Find all words where ipoStatus = 'IPO_ACTIVE'
+- Calculate price based on time elapsed (linear drop from $2.00 → $0.10 over 24h)
+- Update word.ipoCurrentPrice
+- If IPO expired:
+  - If 50%+ shares sold: set ipoStatus = 'TRADING'
+  - Else: set ipoStatus = 'IPO_FAILED'
+
+**Function: unlockVestedShares()** (run daily via cron)
+- Find all vesting schedules
+- Calculate days since word creation
+- Determine unlock percentage based on schedule
+- Update vestingSchedule.unlockedShares
+- Move shares from holdings.lockedQuantity → holdings.availableQuantity
+
+### File 3: `server/orderbook.ts` (NEW)
+
+**Function: placeOrder(userId, wordId, side, orderType, quantity, limitPrice?)**
+- Validate word.ipoStatus === 'TRADING'
+- If BUY: lock user funds (quantity * price)
+- If SELL: lock user shares (move from availableQuantity → lockedQuantity)
+- Create order record with status='OPEN'
+- Call matchOrder() to execute immediately if possible
+
+**Function: matchOrder(newOrder)**
+- Find opposing orders (BUY matches with SELL, vice versa)
+- Sort by price-time priority (best price first, then oldest)
+- Check price compatibility (buy price >= sell price)
+- Execute trades for matching quantities
+- Call executeTrade() for each match
+- Update order status (OPEN → PARTIALLY_FILLED → FILLED)
+
+**Function: executeTrade(buyOrder, sellOrder, quantity, price)**
+- Transfer shares from seller to buyer
+- Transfer money from buyer to seller
+- Charge 0.5% fee to both sides
+- Update holdings (decrease seller quantity, increase buyer quantity)
+- Update user balances
+- Create trade record
+- Update word stats (lastTradePrice, currentPrice, volume24h, tradeCount)
+
+**Function: cancelOrder(orderId, userId)**
+- Verify order belongs to userId
+- Unlock funds (if BUY) or shares (if SELL)
+- Set order status = 'CANCELLED'
+
+**Function: getOrderBook(wordId)**
+- Return all open orders for this word
+- Separate into bids (BUY orders) and asks (SELL orders)
+- Sort bids high→low, asks low→high
+- Aggregate by price level
+
+### File 4: `server/cron.ts` (NEW)
+Set up cron jobs:
+- Hourly: updateIpoPrices()
+- Daily at midnight: unlockVestedShares()
+
+Install: `npm install node-cron @types/node-cron`
+
+Import in `server/index.ts`
+
+### File 5: Update `server/routes.ts`
+
+**DELETE** routes:
+- POST /api/words/:wordId/buy
+- POST /api/words/:wordId/sell
+
+**ADD** routes:
+- POST /api/words (UPDATED to use new createWord function)
+- POST /api/words/:wordId/ipo/buy
+- POST /api/orders
+- DELETE /api/orders/:orderId
+- GET /api/words/:wordId/orderbook
+- GET /api/orders/my
+- GET /api/words/:wordId/trades
+- GET /api/dictionary (for browsing all words with pagination)
+- GET /api/traders (for browsing all users with pagination)
+
+---
+
+## FRONTEND REQUIREMENTS
+
+### Page 1: Dashboard (UPDATE)
+
+**Current**: Shows all words in a long list
+**New**: Show ONLY top 10 words + top 10 traders
+
+**Layout**:
+```
+Header: Balance display
+
+Active IPOs Widget (if any exist):
+  - Show 3 active IPOs with current price, countdown, shares sold
+  - Button: "View all IPOs →" (goes to /dictionary)
+
+Main Content Grid (2 columns):
+
+  Left Column (2/3 width):
+    Title: "Top 10 Words"
+    Button: "Browse All Words →" (goes to /dictionary)
+    - Show WordCard for top 10 words only
+
+  Right Column (1/3 width):
+    Title: "Top 10 Traders"
+    Button: "All Traders →" (goes to /traders)
+    - List of top 10 users by balance
+    - Show rank, username, balance
+```
+
+**Key Changes**:
+- Limit words query to 10 (not all)
+- Limit leaderboard query to 10 (not all)
+- Add buttons to navigate to dictionary/traders pages
+
+### Page 2: Dictionary (NEW - `/dictionary`)
+
+**Purpose**: Browse ALL words with search and pagination
+
+**Layout**:
+```
+Header: "Word Dictionary"
+Back button to dashboard
+
+Search bar: Filter words by text
+
+Word Grid:
+  - Show 50 words per page
+  - Each word uses WordCard component
+  - Pagination controls (Previous / Page X / Next)
+
+Filters (optional):
+  - IPO Active
+  - Trading
+  - Failed
+  - Sort by: Price, Volume, Market Cap, Created
+```
+
+**API**:
+- GET /api/dictionary?page=1&limit=50
+- Returns paginated words
+
+### Page 3: Traders (NEW - `/traders`)
+
+**Purpose**: Browse ALL users with search and pagination
+
+**Layout**:
+```
+Header: "All Traders"
+Back button to dashboard
+
+Search bar: Filter users by username
+
+Traders List:
+  - Show 50 traders per page
+  - Each row: Rank | Username | Balance | "View Profile" button
+  - Sorted by balance (highest first)
+  - Pagination controls
+
+Optional stats per trader:
+  - Total portfolio value
+  - Number of holdings
+  - Biggest win/loss
+```
+
+**API**:
+- GET /api/traders?page=1&limit=50
+- Returns users sorted by wbBalance DESC
+
+### Component 1: WordCard (UPDATE)
+
+**Current**: Shows current price from bonding curve
+**New**: Show different UI based on word status
+
+**IPO_ACTIVE state**:
+- Badge: "IPO LIVE" (blue)
+- Display: Current IPO price (large, blue)
+- Display: "drops to $0.10 WB" (small text)
+- Display: Countdown timer "16h 23m remaining"
+- Display: Progress bar showing shares sold (e.g. "812/980 sold")
+- Button: "Buy IPO Shares →"
+
+**TRADING state**:
+- Badge: "Trading" (green)
+- Display: Current price (large)
+- Display: Market cap
+- Display: 24h volume
+- Display: Best Bid / Best Ask (from order book)
+- Buttons: "View Order Book" | "Trade →"
+
+**IPO_FAILED state**:
+- Badge: "Failed" (red)
+- Display: "IPO Failed - Insufficient interest"
+- Display: "Only X/980 shares sold"
+- No action buttons
+
+### Component 2: Word Detail Page (NEW - `/word/:id`)
+
+**Layout**:
+```
+Header:
+  - Word name (large)
+  - Creator username
+  - Status badge
+  - Back button
+
+Main Grid (2 columns):
+
+  Left (2/3):
+    IF ipoStatus === 'IPO_ACTIVE':
+      Show IPO Auction Component
+    ELSE:
+      Show Trading Interface Component
+
+  Right (1/3):
+    Word Stats Panel:
+      - Market cap
+      - Outstanding shares
+      - Volume 24h
+      - Total trades
+      - Creator
+      - Created date
+
+Tabs Below:
+  - Order Book (live bids/asks)
+  - Trade History (recent trades)
+  - Holders (who owns shares)
+```
+
+### Component 3: IPO Auction (NEW)
+
+**Purpose**: Allow users to buy shares during IPO
+
+**Display**:
+- Large price display (current IPO price)
+- "Price drops hourly" indicator
+- Countdown timer (hours + minutes remaining)
+- Progress bar (shares sold / total offered)
+- Purchase form:
+  - Quantity input
+  - Cost calculation (quantity × price × 1.005 for fee)
+  - "Your Balance: X WB"
+  - "Buy IPO Shares" button
+
+**Actions**:
+- On submit: POST /api/words/:wordId/ipo/buy with {quantity}
+- Show success toast
+- Refresh word data and user balance
+
+### Component 4: Trading Interface (NEW)
+
+**Purpose**: Place buy/sell orders
+
+**Layout (2 tabs)**:
+
+**BUY Tab**:
+- Order Type toggle: [ LIMIT ] [ MARKET ]
+- If LIMIT: Price input (WB per share)
+- Quantity input
+- Cost calculation display:
+  - Estimated Cost: X WB
+  - Fee (0.5%): X WB
+  - Total: X WB
+  - Your Balance: X WB
+- Button: "Place Buy Order" (green)
+
+**SELL Tab**:
+- Order Type toggle: [ LIMIT ] [ MARKET ]
+- If LIMIT: Price input (WB per share)
+- Quantity input
+- Show: "You own X shares"
+- Revenue calculation display:
+  - Estimated Revenue: X WB
+  - Fee (0.5%): X WB
+  - You Receive: X WB
+- Button: "Place Sell Order" (red)
+
+**Validation**:
+- BUY: Check sufficient balance
+- SELL: Check sufficient available shares (not locked)
+
+**Actions**:
+- On submit: POST /api/orders with {wordId, side, orderType, quantity, limitPrice}
+
+### Component 5: Order Book (NEW)
+
+**Purpose**: Show live buy/sell orders
+
+**Layout (2 columns)**:
+
+**BIDS (left)**:
+- Title: "BIDS (Buy Orders)"
+- Color: Green theme
+- Sort: Highest price first
+- Show: Price | Quantity
+- Aggregate orders at same price
+
+**ASKS (right)**:
+- Title: "ASKS (Sell Orders)"
+- Color: Red theme
+- Sort: Lowest price first
+- Show: Price | Quantity
+- Aggregate orders at same price
+
+**Header**:
+- Display spread: "Spread: 0.05 WB (1.0%)"
+
+**Refresh**:
+- Auto-refresh every 3 seconds
+- API: GET /api/words/:wordId/orderbook
+
+### Component 6: My Orders (NEW)
+
+**Purpose**: Show user's open orders with cancel functionality
+
+**Display**:
+- List of open/partially filled orders
+- Each order shows:
+  - Word name
+  - Side (BUY/SELL)
+  - Quantity (filled/total)
+  - Price
+  - Status badge
+  - Cancel button
+
+**Actions**:
+- DELETE /api/orders/:orderId to cancel
+- Show toast on success
+- Refresh order list and balance
+
+### Component 7: Delete `TradeModal.tsx`
+
+This component is no longer needed (replaced by TradingInterface)
+
+---
+
+## UI/UX REQUIREMENTS
+
+### Navigation Updates
+
+Add to main navigation:
+- "Dictionary" link (goes to /dictionary)
+- "Traders" link (goes to /traders)
+
+### Toast Notifications
+
+Show toasts for:
+- Word created successfully
+- IPO purchase successful
+- Order placed successfully
+- Order filled (full or partial)
+- Order cancelled
+- Errors (insufficient balance, etc.)
+
+### Loading States
+
+All components should show loading spinners while fetching data
+
+### Empty States
+
+- No IPOs active: "No active IPOs right now"
+- No open orders: "You have no open orders"
+- No words in dictionary: "No words yet"
+- Order book empty: "No buy orders" / "No sell orders"
+
+### Responsive Design
+
+- Dashboard: Stack columns on mobile
+- Word detail: Stack IPO/trading interface on mobile
+- Order book: Stack bids/asks vertically on mobile
+
+---
+
+## TESTING REQUIREMENTS
+
+After implementation, verify:
+
+1. **Word Creation**:
+   - Create word, costs 50 WB
+   - Word starts with ipoStatus = 'IPO_ACTIVE'
+   - Creator gets 20 shares (all locked)
+
+2. **IPO Flow**:
+   - Buy shares during IPO
+   - Price displayed correctly
+   - Shares added to holdings
+   - Balance deducted correctly
+   - When all shares sold, status → 'TRADING'
+
+3. **Order Book**:
+   - Place buy limit order
+   - Place sell limit order
+   - Orders match automatically if prices compatible
+   - Trade executes, shares transfer, balances update
+
+4. **Vesting**:
+   - Creator shares are locked initially
+   - After 7 days, 20% unlocks
+   - Unlocked shares move to availableQuantity
+
+5. **Dashboard**:
+   - Shows ONLY top 10 words
+   - Shows ONLY top 10 traders
+   - "Browse All" buttons work
+
+6. **Dictionary**:
+   - Shows ALL words (paginated)
+   - Search works
+   - Pagination works
+
+7. **Traders**:
+   - Shows ALL users (paginated)
+   - Sorted by balance
+   - Search works
+
+---
+
+## IMPLEMENTATION ORDER
+
+1. **Database** (30 min)
+   - Drop/truncate tables
+   - Update schema
+   - Run migrations
+
+2. **Backend Core** (1 hour)
+   - Create constants.ts
+   - Create word-creation.ts
+   - Create orderbook.ts
+   - Create cron.ts
+
+3. **Backend Routes** (30 min)
+   - Delete old routes
+   - Add new routes
+   - Test with API client
+
+4. **Frontend Pages** (1.5 hours)
+   - Update dashboard.tsx
+   - Create dictionary.tsx
+   - Create traders.tsx
+
+5. **Frontend Components** (1.5 hours)
+   - Update WordCard.tsx
+   - Create word-detail.tsx
+   - Create IpoAuction.tsx
+   - Create TradingInterface.tsx
+   - Create OrderBook.tsx
+   - Create MyOrders.tsx
+
+6. **Testing** (30 min)
+   - Test all flows
+   - Fix bugs
+
+**Total: ~5.5 hours**
+
+---
+
+## CRITICAL NOTES
+
+**DO NOT**:
+- Keep the bonding curve buy/sell logic (delete it entirely)
+- Keep the receipts table (drop it)
+- Show all words on dashboard (limit to 10)
+
+**DO**:
+- Use transactions for all trading operations
+- Lock funds/shares when placing orders
+- Unlock funds/shares when cancelling orders
+- Auto-match orders when placed
+- Update word stats on every trade
+- Run cron jobs for IPO price updates and vesting
+
+**SPAM PREVENTION**:
+The 50 WB fee + order book system makes spam unprofitable:
+- Spam word → No buyers → Can't sell → Lose 50 WB
+- Quality word → High demand → Can sell → Profit
+
+This is the ONLY way to prevent exploitation.
+
+---
+
+## SUMMARY
+
+You're building a peer-to-peer order book trading platform where:
+- Users trade directly with each other (not the platform)
+- New words go through 24h Dutch auction IPOs
+- Creator shares vest over 60 days
+- Dashboard shows top 10, dedicated pages show all
+- Order matching happens automatically
+- Spam is economically disincentivized
+
+**This creates a realistic, un-exploitable, fun economy where linguistic relevance = market value.**
