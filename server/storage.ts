@@ -60,7 +60,7 @@ export interface IStorage {
     lockedQuantity?: number;
     averageCost?: string;
   }): Promise<void>;
-  getUserPortfolio(userId: string): Promise<Holding[]>;
+  getUserPortfolio(userId: string): Promise<any[]>;
   getWordHolders(wordId: string): Promise<Holding[]>;
   
   // Order operations
@@ -308,11 +308,36 @@ export class DatabaseStorage implements IStorage {
       .where(eq(holdings.id, id));
   }
 
-  async getUserPortfolio(userId: string): Promise<Holding[]> {
-    return await db
-      .select()
+  async getUserPortfolio(userId: string): Promise<any[]> {
+    const results = await db
+      .select({
+        holding: holdings,
+        word: words,
+      })
       .from(holdings)
+      .innerJoin(words, eq(holdings.wordId, words.id))
       .where(eq(holdings.userId, userId));
+    
+    // Transform to frontend format
+    return results.map(({ holding, word }) => {
+      const currentValue = holding.quantity * parseFloat(word.currentPrice || '0');
+      const costBasis = parseFloat(holding.averageCost);
+      const profitLoss = currentValue - costBasis;
+      const profitLossPercent = costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
+      
+      return {
+        word: {
+          id: word.id,
+          textNormalized: word.textNormalized,
+          currentPrice: word.currentPrice,
+        },
+        quantity: holding.quantity,
+        costBasis: holding.averageCost,
+        currentValue,
+        profitLoss,
+        profitLossPercent,
+      };
+    });
   }
 
   async getWordHolders(wordId: string): Promise<Holding[]> {
