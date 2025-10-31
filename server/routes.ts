@@ -753,13 +753,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get transactions
+  // Get transactions with word data
   app.get('/api/transactions', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
-      const txns = await storage.getUserTransactions(userId, limit);
-      res.json(txns);
+      const offset = (page - 1) * limit;
+
+      // Get transactions with word data joined
+      const userTransactions = await db
+        .select({
+          transaction: transactions,
+          word: words,
+        })
+        .from(transactions)
+        .leftJoin(words, eq(transactions.wordId, words.id))
+        .where(eq(transactions.userId, userId))
+        .orderBy(desc(transactions.createdAt))
+        .limit(limit)
+        .offset(offset);
+
+      res.json(userTransactions);
     } catch (error) {
       console.error("Error fetching transactions:", error);
       res.status(500).json({ message: "Failed to fetch transactions" });
@@ -802,6 +817,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching word trades:", error);
       res.status(500).json({ message: "Failed to fetch trades" });
+    }
+  });
+
+  // Get word price history (all trades for a word)
+  app.get('/api/words/:id/history', async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Get all trades for this word ordered by time
+      const priceHistory = await db
+        .select({
+          price: trades.price,
+          quantity: trades.quantity,
+          totalValue: trades.totalValue,
+          createdAt: trades.createdAt,
+          isIpo: trades.isIpo,
+        })
+        .from(trades)
+        .where(eq(trades.wordId, id))
+        .orderBy(desc(trades.createdAt))
+        .limit(100);
+
+      res.json(priceHistory);
+    } catch (error) {
+      console.error("Error fetching word price history:", error);
+      res.status(500).json({ message: "Failed to fetch price history" });
+    }
+  });
+
+  // Get user profile data (for viewing other users)
+  app.get('/api/users/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Get user basic info
+      const [user] = await db
+        .select({
+          id: users.id,
+          username: users.username,
+          wbBalance: users.wbBalance,
+          totalEarnings: users.totalEarnings,
+          createdAt: users.createdAt,
+        })
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Get user's portfolio
+      const portfolio = await db
+        .select({
+          holding: holdings,
+          word: words,
+        })
+        .from(holdings)
+        .leftJoin(words, eq(holdings.wordId, words.id))
+        .where(eq(holdings.userId, id))
+        .orderBy(desc(holdings.quantity));
+
+      // Get user's recent trades (last 20)
+      const recentTrades = await db
+        .select({
+          trade: trades,
+          word: words,
+        })
+        .from(trades)
+        .leftJoin(words, eq(trades.wordId, words.id))
+        .where(or(eq(trades.buyerId, id), eq(trades.sellerId, id)))
+        .orderBy(desc(trades.createdAt))
+        .limit(20);
+
+      // Get word submission stats
+      const [submittedWords] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(words)
+        .where(eq(words.creatorId, id));
+
+      res.json({
+        user,
+        portfolio,
+        recentTrades,
+        submittedWordsCount: Number(submittedWords.count),
+      });
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+      res.status(500).json({ message: "Failed to fetch user profile" });
     }
   });
 
