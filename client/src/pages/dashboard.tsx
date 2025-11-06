@@ -97,14 +97,14 @@ export default function Dashboard() {
                 <HelpCircle className="h-4 w-4" />
               </Button>
 
-              <Card className="border-2 border-primary/20 bg-primary/5">
+              <Card className="border-2 border-primary/20 bg-primary/5 min-w-[140px]">
                 <CardContent className="p-2 sm:p-3 flex items-center gap-2 sm:gap-3">
                   <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                   <div>
-                    <div className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wide">
                       Balance
                     </div>
-                    <div className="font-mono font-bold text-sm sm:text-lg" data-testid="text-balance">
+                    <div className="font-mono font-bold text-base whitespace-nowrap" data-testid="text-balance">
                       {formatWB(userBalance)} WB
                     </div>
                   </div>
@@ -119,6 +119,16 @@ export default function Dashboard() {
                   data-testid="button-transactions"
                 >
                   <BarChart3 className="h-4 w-4" />
+                </Button>
+              </Link>
+
+              <Link href={`/users/${user.id}`}>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  data-testid="button-profile"
+                >
+                  <User className="h-4 w-4" />
                 </Button>
               </Link>
 

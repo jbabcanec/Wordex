@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatWB } from "@/lib/utils";
+import { TRADING_FEE_PERCENT } from "@shared/constants";
 import {
   Dialog,
   DialogContent,
@@ -74,12 +75,12 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
 
   const estimatedPrice = side === "buy" ? bestAsk : bestBid;
   const estimatedCost = numShares * estimatedPrice;
-  const fee = estimatedCost * 0.005; // 0.5% fee
+  const fee = estimatedCost * TRADING_FEE_PERCENT;
   const totalCost = side === "buy" ? estimatedCost + fee : estimatedCost - fee;
 
   const canAffordMarket = side === "buy" ? totalCost <= userBalance : numShares <= userShares;
-  const canAffordLimit = side === "buy" 
-    ? (numShares * limitPriceNum * 1.005) <= userBalance 
+  const canAffordLimit = side === "buy"
+    ? (numShares * limitPriceNum * (1 + TRADING_FEE_PERCENT)) <= userBalance
     : numShares <= userShares;
 
   const createOrderMutation = useMutation({
@@ -91,7 +92,7 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
           wordId: word.id,
           side,
           orderType,
-          shares: numShares,
+          quantity: numShares,
           limitPrice: orderType === "limit" ? limitPriceNum : undefined,
         }),
         credentials: "include",
@@ -205,7 +206,7 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
           </div>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Order Book */}
           <div className="space-y-3">
             <h3 className="font-semibold text-sm flex items-center gap-2">
@@ -261,11 +262,11 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
           {/* Order Form */}
           <div className="space-y-4">
             <Tabs value={side} onValueChange={(v) => setSide(v as "buy" | "sell")}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="buy" className="data-[state=active]:bg-green-600 data-[state=active]:text-white" data-testid="tab-buy">
+              <TabsList className="grid w-full grid-cols-2 h-12 sm:h-10">
+                <TabsTrigger value="buy" className="data-[state=active]:bg-green-600 data-[state=active]:text-white min-h-[44px] sm:min-h-0" data-testid="tab-buy">
                   Buy
                 </TabsTrigger>
-                <TabsTrigger value="sell" className="data-[state=active]:bg-red-600 data-[state=active]:text-white" data-testid="tab-sell">
+                <TabsTrigger value="sell" className="data-[state=active]:bg-red-600 data-[state=active]:text-white min-h-[44px] sm:min-h-0" data-testid="tab-sell">
                   Sell
                 </TabsTrigger>
               </TabsList>
@@ -349,7 +350,7 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Fee (0.5%)</span>
+                      <span className="text-muted-foreground">Fee ({(TRADING_FEE_PERCENT * 100).toFixed(1)}%)</span>
                       <span className="font-mono">{formatWB(fee)} WB</span>
                     </div>
                     <div className="border-t pt-2 flex justify-between font-semibold">
@@ -372,7 +373,9 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
                       <Alert className="bg-blue-500/10 border-blue-500/30">
                         <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-500" />
                         <AlertDescription className="text-xs">
-                          Limit order will execute when a matching {side === "buy" ? "seller" : "buyer"} is found.
+                          {side === "buy"
+                            ? "Your buy order will be filled when a seller matches your price."
+                            : "Your sell order will be filled when a buyer matches your price."}
                         </AlertDescription>
                       </Alert>
                     )}

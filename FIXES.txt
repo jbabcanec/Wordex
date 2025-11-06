@@ -6,56 +6,6 @@ Date: 2025-11-05
 Total Fixes: 40
 Priority Breakdown: P0 (4), P1 (9), P2 (15), P3 (12)
 
-================================================================================
-LOCAL TESTING SETUP
-================================================================================
-
-PREREQUISITES:
-- Node.js 20+ installed
-- PostgreSQL database available
-- Environment variables configured
-
-ENVIRONMENT SETUP:
-1. Create .env file in project root:
-   DATABASE_URL=postgresql://user:pass@host:5432/dbname
-   SESSION_SECRET=your-secret-key-here
-   NODE_ENV=development
-
-2. Install dependencies:
-   npm install
-
-3. Run database migrations (if needed):
-   npm run db:push
-
-RUNNING LOCALLY:
-1. Start dev server:
-   npm run dev
-
-2. Server runs on http://localhost:5000
-   - Backend: http://localhost:5000/api
-   - Frontend: Vite dev server proxies to backend
-
-3. Test on mobile:
-   - Find your local IP: ifconfig (Mac/Linux) or ipconfig (Windows)
-   - Access from phone: http://YOUR_IP:5000
-   - Ensure phone is on same WiFi network
-
-4. View logs:
-   - Backend logs appear in terminal
-   - Frontend logs in browser console (F12)
-
-TESTING WORKFLOW:
-1. Make changes locally
-2. Test at http://localhost:5000
-3. Test mobile at http://YOUR_IP:5000
-4. Verify fixes work
-5. Commit to git
-6. Push to GitHub
-7. Replit will auto-deploy from GitHub
-
-================================================================================
-CRITICAL FIXES (P0) - APP BREAKING
-================================================================================
 
 FIX-001: API Parameter Mismatch
 Priority: P0

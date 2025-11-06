@@ -8,9 +8,7 @@ import { Badge } from "@/components/ui/badge";
 
 interface LeaderboardEntry {
   id: string;
-  email: string | null;
-  firstName: string | null;
-  lastName: string | null;
+  username: string;
   portfolioValue: string;
   holdingsValue: string;
   wbBalance: string;
@@ -69,12 +67,7 @@ export function Leaderboard() {
   };
 
   const getDisplayName = (entry: LeaderboardEntry) => {
-    if (entry.firstName && entry.lastName) {
-      return `${entry.firstName} ${entry.lastName}`;
-    }
-    if (entry.firstName) return entry.firstName;
-    if (entry.email) return entry.email;
-    return "Anonymous Trader";
+    return entry.username || "Anonymous Trader";
   };
 
   return (
@@ -92,11 +85,11 @@ export function Leaderboard() {
       <CardContent>
         <div className="space-y-2">
           {entries.slice(0, 10).map((entry) => (
-            <div
-              key={entry.id}
-              className="flex items-center gap-3 p-3 rounded-md border bg-card hover-elevate"
-              data-testid={`leaderboard-rank-${entry.rank}`}
-            >
+            <Link key={entry.id} href={`/users/${entry.id}`}>
+              <div
+                className="flex items-center gap-3 p-3 rounded-md border bg-card hover-elevate cursor-pointer"
+                data-testid={`leaderboard-rank-${entry.rank}`}
+              >
               <div className="w-8 flex items-center justify-center">
                 {getRankIcon(entry.rank) || (
                   <span className="font-mono text-sm text-muted-foreground">
@@ -131,6 +124,7 @@ export function Leaderboard() {
                 )}
               </div>
             </div>
+            </Link>
           ))}
         </div>
       </CardContent>

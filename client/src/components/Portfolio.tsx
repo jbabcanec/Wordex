@@ -1,8 +1,12 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
 import { formatWB, formatPercentage } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { TrendingUp, TrendingDown, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TradeModal } from "./TradeModal";
 
 interface PortfolioHolding {
   word: {
@@ -18,6 +22,11 @@ interface PortfolioHolding {
 }
 
 export function Portfolio() {
+  const { user } = useAuth();
+  const [selectedWord, setSelectedWord] = useState<any>(null);
+  const [tradeModalOpen, setTradeModalOpen] = useState(false);
+  const [defaultSide, setDefaultSide] = useState<"buy" | "sell">("buy");
+
   const { data: holdings, isLoading } = useQuery<PortfolioHolding[]>({
     queryKey: ["/api/portfolio"],
     refetchInterval: 10000,
@@ -25,6 +34,7 @@ export function Portfolio() {
 
   if (isLoading) {
     return (
+      <>
       <Card>
         <CardHeader>
           <CardTitle className="font-display">Your Portfolio</CardTitle>
@@ -37,11 +47,13 @@ export function Portfolio() {
           </div>
         </CardContent>
       </Card>
+      </>
     );
   }
 
   if (!holdings || holdings.length === 0) {
     return (
+      <>
       <Card>
         <CardHeader>
           <CardTitle className="font-display">Your Portfolio</CardTitle>
@@ -58,6 +70,7 @@ export function Portfolio() {
           </div>
         </CardContent>
       </Card>
+      </>
     );
   }
 
@@ -67,6 +80,7 @@ export function Portfolio() {
   const totalProfitLossPercent = totalCost > 0 ? (totalProfitLoss / totalCost) * 100 : 0;
 
   return (
+    <>
     <Card>
       <CardHeader>
         <CardTitle className="font-display">Your Portfolio</CardTitle>
@@ -118,41 +132,91 @@ export function Portfolio() {
           {holdings.map((holding) => (
             <div
               key={holding.word.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-md border bg-card hover-elevate gap-2"
+              className="flex flex-col gap-2 p-3 rounded-md border bg-card hover-elevate"
               data-testid={`holding-${holding.word.textNormalized}`}
             >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-mono font-bold tracking-wider text-sm sm:text-base truncate">
-                    {holding.word.textNormalized}
-                  </span>
-                  <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
-                    {holding.quantity.toLocaleString()} shares
-                  </span>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono font-bold tracking-wider text-sm sm:text-base truncate">
+                      {holding.word.textNormalized}
+                    </span>
+                    <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
+                      {holding.quantity.toLocaleString()} shares
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Avg cost: {formatWB(parseFloat(holding.costBasis) / holding.quantity)} WB/share
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  Avg cost: {formatWB(parseFloat(holding.costBasis) / holding.quantity)} WB/share
+
+                <div className="text-right">
+                  <div className="font-mono font-semibold">
+                    {formatWB(holding.currentValue)} WB
+                  </div>
+                  <div
+                    className={cn(
+                      "text-xs font-mono flex items-center gap-1 justify-end",
+                      holding.profitLoss >= 0 ? "text-gain" : "text-loss"
+                    )}
+                  >
+                    {holding.profitLoss >= 0 ? "+" : ""}
+                    {formatWB(holding.profitLoss)} WB ({formatPercentage(holding.profitLossPercent)})
+                  </div>
                 </div>
               </div>
 
-              <div className="text-right sm:text-left flex sm:flex-col justify-between sm:justify-start">
-                <div className="font-mono font-semibold">
-                  {formatWB(holding.currentValue)} WB
-                </div>
-                <div
-                  className={cn(
-                    "text-xs font-mono flex items-center gap-1 justify-end",
-                    holding.profitLoss >= 0 ? "text-gain" : "text-loss"
-                  )}
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setSelectedWord({
+                      ...holding.word,
+                      currentPrice: holding.word.currentPrice,
+                      totalShares: 1000,
+                      outstandingShares: 0,
+                    });
+                    setDefaultSide("buy");
+                    setTradeModalOpen(true);
+                  }}
                 >
-                  {holding.profitLoss >= 0 ? "+" : ""}
-                  {formatWB(holding.profitLoss)} WB ({formatPercentage(holding.profitLossPercent)})
-                </div>
+                  Buy More
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="flex-1"
+                  onClick={() => {
+                    setSelectedWord({
+                      ...holding.word,
+                      currentPrice: holding.word.currentPrice,
+                      totalShares: 1000,
+                      outstandingShares: 0,
+                    });
+                    setDefaultSide("sell");
+                    setTradeModalOpen(true);
+                  }}
+                >
+                  Sell
+                </Button>
               </div>
             </div>
           ))}
         </div>
       </CardContent>
     </Card>
+
+    {selectedWord && user && (
+      <TradeModal
+        open={tradeModalOpen}
+        onOpenChange={setTradeModalOpen}
+        word={selectedWord}
+        userBalance={parseFloat(user.wbBalance)}
+        userShares={holdings?.find(h => h.word.id === selectedWord.id)?.quantity || 0}
+      />
+    )}
+    </>
   );
 }
