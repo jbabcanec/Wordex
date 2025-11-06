@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { db } from "./db";
 import { words, users, transactions, holdings, orders, trades, vestingSchedules } from "@shared/schema";
-import { eq, and, sql, desc, or } from "drizzle-orm";
+import { eq, and, sql, desc, asc, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import {
   SUBMISSION_FEE,
@@ -774,6 +774,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching top words:", error);
       res.status(500).json({ message: "Failed to fetch top words" });
+    }
+  });
+
+  // Get ticker words (for stock ticker with filters)
+  app.get('/api/words/ticker', async (req, res) => {
+    try {
+      const filter = req.query.filter as string || 'trending';
+      const limit = 20; // Show 20 words in ticker
+
+      let orderByClause;
+      let whereCondition = eq(words.ipoStatus, 'TRADING'); // Only show trading words
+
+      switch (filter) {
+        case 'gainers':
+          // Top gainers - would need 24h price change calculation
+          // For now, sort by current price change or volume
+          orderByClause = desc(words.volume24h);
+          break;
+        case 'losers':
+          // Top losers - similar to gainers
+          orderByClause = asc(words.volume24h);
+          break;
+        case 'volume':
+          // Most traded
+          orderByClause = desc(words.tradeCount);
+          break;
+        case 'trending':
+        default:
+          // Mix of volume and recent activity
+          orderByClause = desc(words.volume24h);
+          break;
+      }
+
+      const tickerWords = await db
+        .select({
+          id: words.id,
+          textNormalized: words.textNormalized,
+          displayText: words.displayText,
+          currentPrice: words.currentPrice,
+          change24h: sql<number>`0`, // TODO: Calculate actual 24h change
+          tradeCount: words.tradeCount,
+          ipoStatus: words.ipoStatus,
+        })
+        .from(words)
+        .where(whereCondition)
+        .orderBy(orderByClause)
+        .limit(limit);
+
+      res.json(tickerWords);
+    } catch (error) {
+      console.error("Error fetching ticker words:", error);
+      res.status(500).json({ message: "Failed to fetch ticker words" });
     }
   });
 

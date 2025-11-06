@@ -293,6 +293,230 @@ Files: Create client/src/components/MyOrders.tsx
 
 Need: Component to view/cancel open orders
 
+DATABASE STRUCTURE FOR ORDER QUEUING:
+================================================================================
+The orders table ALREADY EXISTS and contains everything needed for order management.
+No new tables required!
+
+TABLE: orders
+Columns:
+  - id (varchar, primary key, UUID)
+  - userId (varchar, references users.id)
+  - wordId (varchar, references words.id)
+  - side (varchar) - 'BUY' or 'SELL'
+  - orderType (varchar) - 'LIMIT' or 'MARKET'
+  - quantity (integer) - Original order size
+  - filledQuantity (integer) - How many shares filled so far
+  - remainingQuantity (integer) - Shares still waiting to fill
+  - limitPrice (decimal) - Price for limit orders (null for market)
+  - status (varchar) - 'OPEN', 'PARTIALLY_FILLED', 'FILLED', 'CANCELLED'
+  - createdAt (timestamp) - When order was placed
+  - updatedAt (timestamp) - Last modification time
+
+Indexes:
+  - idx_orders_user (userId) - Fast user order lookups
+  - idx_orders_word (wordId) - Fast word-specific order book
+  - idx_orders_status (status) - Find active orders quickly
+  - idx_orders_side_status (side, status) - Matching engine optimization
+  - idx_orders_created_at (createdAt) - FIFO priority
+
+HOW THE QUEUE WORKS:
+1. User places limit order → Creates row with status='OPEN'
+2. Matching engine runs every minute (server/cron.ts)
+3. Orders matched by price-time priority (FIFO)
+4. Partial fills update filledQuantity, remainingQuantity, status='PARTIALLY_FILLED'
+5. Complete fills set status='FILLED'
+6. User can cancel → status='CANCELLED', shares unlocked
+
+ORDER MANAGEMENT UI NEEDS:
+- Display user's OPEN and PARTIALLY_FILLED orders
+- Show: word, side, price, quantity, filled/remaining, time placed
+- Cancel button for each order
+- Real-time updates (refetch every 5 seconds)
+- Filter by word, side, status
+- Sort by newest, price, size
+
+SQL TO VERIFY TABLE EXISTS (Run in Replit Console):
+================================================================================
+SELECT table_name, column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'orders'
+ORDER BY ordinal_position;
+
+SQL TO CREATE TABLE IF MISSING (Should not be needed):
+================================================================================
+CREATE TABLE IF NOT EXISTS orders (
+  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id VARCHAR NOT NULL REFERENCES users(id),
+  word_id VARCHAR NOT NULL REFERENCES words(id),
+  side VARCHAR(10) NOT NULL,
+  order_type VARCHAR(10) NOT NULL,
+  quantity INTEGER NOT NULL,
+  filled_quantity INTEGER NOT NULL DEFAULT 0,
+  remaining_quantity INTEGER NOT NULL,
+  limit_price DECIMAL(10, 2),
+  status VARCHAR(20) NOT NULL DEFAULT 'OPEN',
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_word ON orders(word_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_side_status ON orders(side, status);
+CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
+
+SQL TO CHECK EXISTING ORDERS (See what's in queue):
+================================================================================
+-- View all active orders
+SELECT
+  o.id,
+  u.username,
+  w.text_normalized as word,
+  o.side,
+  o.order_type,
+  o.quantity,
+  o.filled_quantity,
+  o.remaining_quantity,
+  o.limit_price,
+  o.status,
+  o.created_at
+FROM orders o
+JOIN users u ON o.user_id = u.id
+JOIN words w ON o.word_id = w.id
+WHERE o.status IN ('OPEN', 'PARTIALLY_FILLED')
+ORDER BY o.created_at ASC
+LIMIT 50;
+
+-- Count orders by status
+SELECT status, COUNT(*) as count
+FROM orders
+GROUP BY status;
+
+-- View order book for a specific word (replace 'WORD_ID' with actual ID)
+SELECT
+  side,
+  limit_price,
+  SUM(remaining_quantity) as total_shares,
+  COUNT(*) as num_orders
+FROM orders
+WHERE word_id = 'WORD_ID'
+  AND status IN ('OPEN', 'PARTIALLY_FILLED')
+GROUP BY side, limit_price
+ORDER BY
+  CASE WHEN side = 'SELL' THEN limit_price END ASC,
+  CASE WHEN side = 'BUY' THEN limit_price END DESC;
+
+WHAT'S CURRENTLY AVAILABLE TO BUY (ASK/SELL ORDERS):
+================================================================================
+The "what's available to buy" = SELL orders (ASKs) in the order book
+
+Current Implementation:
+- TradeModal already shows this in the order book section
+- API endpoint: GET /api/words/:wordId/orderbook
+- Returns: { bids: [...], asks: [...] }
+- ASKs = SELL orders (what you can buy)
+- BIDs = BUY orders (what others want to pay)
+
+SQL to see what's available to buy for a word:
+SELECT
+  o.limit_price,
+  SUM(o.remaining_quantity) as shares_available,
+  COUNT(*) as num_sellers,
+  MIN(u.username) as example_seller
+FROM orders o
+JOIN users u ON o.user_id = u.id
+WHERE o.word_id = 'WORD_ID'
+  AND o.side = 'SELL'
+  AND o.status IN ('OPEN', 'PARTIALLY_FILLED')
+GROUP BY o.limit_price
+ORDER BY o.limit_price ASC;  -- Cheapest first
+
+SQL to see ALL available inventory across ALL words:
+SELECT
+  w.text_normalized as word,
+  w.current_price,
+  o.limit_price as ask_price,
+  SUM(o.remaining_quantity) as shares_available,
+  COUNT(DISTINCT o.user_id) as num_sellers,
+  COUNT(*) as num_orders
+FROM orders o
+JOIN words w ON o.word_id = w.id
+WHERE o.side = 'SELL'
+  AND o.status IN ('OPEN', 'PARTIALLY_FILLED')
+GROUP BY w.id, w.text_normalized, w.current_price, o.limit_price
+ORDER BY w.text_normalized, o.limit_price ASC
+LIMIT 100;
+
+POTENTIAL NEW FEATURE - "Marketplace View":
+If you want a dedicated page showing all available inventory:
+- New page: /marketplace
+- Shows all SELL orders across all words
+- Sortable by: word, price, quantity, lowest ask
+- Quick buy button for each listing
+- Real-time updates
+
+This would complement the existing TradeModal order book view.
+
+DIAGNOSING ORDER FAILURES ("Order Failed" errors):
+================================================================================
+Common causes when placing orders fails:
+
+1. Word not in TRADING status:
+   - Orders can only be placed on words with ipoStatus = 'TRADING'
+   - IPO_ACTIVE words must be bought through IPO modal
+   - Check word status in database
+
+2. Insufficient balance (BUY orders):
+   - Need: (quantity × price) + 0.5% fee
+   - Check user.wbBalance in database
+
+3. Insufficient shares (SELL orders):
+   - Need: holding.availableQuantity >= quantity
+   - Shares locked in other orders reduce available
+   - Check holdings table
+
+4. Market order with no liquidity:
+   - Market BUY fails if no SELL orders exist
+   - Market SELL fails if no BUY orders exist
+   - These fail fast with clear error message
+
+SQL to check word status:
+SELECT
+  text_normalized,
+  ipo_status,
+  current_price,
+  outstanding_shares
+FROM words
+WHERE text_normalized = 'WORD_NAME';
+
+SQL to check your balance and holdings:
+SELECT
+  u.username,
+  u.wb_balance,
+  h.available_quantity,
+  h.locked_quantity,
+  w.text_normalized
+FROM users u
+LEFT JOIN holdings h ON u.id = h.user_id
+LEFT JOIN words w ON h.word_id = w.id
+WHERE u.username = 'YOUR_USERNAME';
+
+SQL to check what's for sale (can you buy?):
+SELECT
+  w.text_normalized,
+  o.limit_price,
+  SUM(o.remaining_quantity) as shares_for_sale
+FROM orders o
+JOIN words w ON o.word_id = w.id
+WHERE o.side = 'SELL'
+  AND o.status IN ('OPEN', 'PARTIALLY_FILLED')
+  AND w.text_normalized = 'WORD_NAME'
+GROUP BY w.text_normalized, o.limit_price
+ORDER BY o.limit_price ASC;
+
+Run these queries in Replit console to diagnose the specific failure.
+
 --------------------------------------------------------------------------------
 
 FIX-021: No Liquidity Indicators

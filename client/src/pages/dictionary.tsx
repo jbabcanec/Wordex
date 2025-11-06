@@ -34,7 +34,7 @@ export default function Dictionary() {
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [sortBy, setSortBy] = useState("newest");
+  const [sortBy, setSortBy] = useState("alphabetical");
   const [viewMode, setViewMode] = useState<"compact" | "detailed">("compact");
   const limit = 50;
 
