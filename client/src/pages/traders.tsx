@@ -8,6 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Users,
   ArrowLeft,
   Search,
@@ -16,12 +23,21 @@ import {
   Trophy,
   TrendingUp,
   Wallet,
+  ArrowUpDown,
+  Filter,
+  LayoutGrid,
+  List,
+  Activity,
+  Award,
 } from "lucide-react";
 import type { User } from "@shared/schema";
 
 export default function Traders() {
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("rank");
+  const [activityFilter, setActivityFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<"compact" | "detailed">("detailed");
   const limit = 50;
 
   const { data: traders, isLoading } = useQuery<User[]>({
@@ -29,13 +45,45 @@ export default function Traders() {
     refetchInterval: 10000,
   });
 
-  // Backend now handles filtering
-  const filteredTraders = traders || [];
+  // Filter traders by activity
+  const filteredTraders = (traders || []).filter((trader) => {
+    if (activityFilter === "all") return true;
+
+    const lastActivity = new Date(trader.updatedAt || trader.createdAt);
+    const now = new Date();
+    const daysSinceActivity = (now.getTime() - lastActivity.getTime()) / (1000 * 60 * 60 * 24);
+
+    if (activityFilter === "today") return daysSinceActivity < 1;
+    if (activityFilter === "week") return daysSinceActivity < 7;
+    if (activityFilter === "month") return daysSinceActivity < 30;
+
+    return true;
+  });
+
+  // Sort traders
+  const sortedTraders = [...filteredTraders].sort((a, b) => {
+    switch (sortBy) {
+      case "balance-high":
+        return parseFloat(b.wbBalance) - parseFloat(a.wbBalance);
+      case "balance-low":
+        return parseFloat(a.wbBalance) - parseFloat(b.wbBalance);
+      case "earnings-high":
+        return parseFloat(b.totalEarnings) - parseFloat(a.totalEarnings);
+      case "earnings-low":
+        return parseFloat(a.totalEarnings) - parseFloat(b.totalEarnings);
+      case "newest":
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      case "rank":
+      default:
+        // Rank by balance (default leaderboard behavior)
+        return parseFloat(b.wbBalance) - parseFloat(a.wbBalance);
+    }
+  });
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="md:sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container max-w-screen-2xl mx-auto px-3 sm:px-6">
           <div className="flex h-16 items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -59,18 +107,72 @@ export default function Traders() {
       </header>
 
       <main className="container max-w-screen-2xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
-        {/* Search */}
+        {/* Filters & Controls */}
         <Card className="mb-6">
           <CardContent className="p-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search traders by username..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-                data-testid="input-search-traders"
-              />
+            <div className="flex flex-col gap-4">
+              {/* Search and View Toggle */}
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search traders by username..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                    data-testid="input-search-traders"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant={viewMode === "compact" ? "default" : "outline"}
+                    size="icon"
+                    onClick={() => setViewMode("compact")}
+                    data-testid="button-compact-view"
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant={viewMode === "detailed" ? "default" : "outline"}
+                    size="icon"
+                    onClick={() => setViewMode("detailed")}
+                    data-testid="button-detailed-view"
+                  >
+                    <List className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Filters and Sort */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Select value={activityFilter} onValueChange={setActivityFilter}>
+                  <SelectTrigger className="w-full sm:w-48" data-testid="select-activity-filter">
+                    <Filter className="h-4 w-4 mr-2" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Traders</SelectItem>
+                    <SelectItem value="today">Active Today</SelectItem>
+                    <SelectItem value="week">Active This Week</SelectItem>
+                    <SelectItem value="month">Active This Month</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-full sm:w-48" data-testid="select-sort">
+                    <ArrowUpDown className="h-4 w-4 mr-2" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="rank">Leaderboard Rank</SelectItem>
+                    <SelectItem value="balance-high">Balance: High to Low</SelectItem>
+                    <SelectItem value="balance-low">Balance: Low to High</SelectItem>
+                    <SelectItem value="earnings-high">Earnings: High to Low</SelectItem>
+                    <SelectItem value="earnings-low">Earnings: Low to High</SelectItem>
+                    <SelectItem value="newest">Newest First</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -79,18 +181,24 @@ export default function Traders() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="font-display">Leaderboard</CardTitle>
-              <Badge variant="secondary">{filteredTraders.length} Results</Badge>
+              <CardTitle className="font-display">
+                {sortBy === "rank" ? "Leaderboard" :
+                 sortBy === "newest" ? "Newest Traders" :
+                 sortBy.includes("balance") ? "By Balance" :
+                 sortBy.includes("earnings") ? "By Earnings" :
+                 "All Traders"}
+              </CardTitle>
+              <Badge variant="secondary">{sortedTraders.length} Results</Badge>
             </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="space-y-3">
+              <div className={viewMode === "compact" ? "grid grid-cols-1 md:grid-cols-2 gap-3" : "space-y-3"}>
                 {[...Array(10)].map((_, i) => (
                   <div key={i} className="h-20 rounded-md bg-muted/30 animate-pulse" />
                 ))}
               </div>
-            ) : filteredTraders.length === 0 ? (
+            ) : sortedTraders.length === 0 ? (
               <div className="text-center py-16 px-6">
                 <div className="p-4 rounded-full bg-primary/10 w-fit mx-auto mb-4">
                   <Users className="h-10 w-10 text-primary" />
@@ -103,12 +211,74 @@ export default function Traders() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {filteredTraders.map((trader, index) => {
+              <div className={viewMode === "compact" ? "grid grid-cols-1 md:grid-cols-2 gap-3" : "space-y-2"}>
+                {sortedTraders.map((trader, index) => {
                   const rank = (page - 1) * limit + index + 1;
                   const balance = parseFloat(trader.wbBalance);
                   const earnings = parseFloat(trader.totalEarnings);
-                  
+
+                  if (viewMode === "compact") {
+                    return (
+                      <Link key={trader.id} href={`/users/${trader.id}`}>
+                        <Card className="hover-elevate cursor-pointer">
+                          <CardContent className="p-4">
+                            <div className="flex items-start gap-3">
+                              {/* Avatar and Rank */}
+                              <div className="relative">
+                                <Avatar className="h-12 w-12 border-2">
+                                  <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                                    {trader.username?.[0]?.toUpperCase() || "?"}
+                                  </AvatarFallback>
+                                </Avatar>
+                                {rank <= 3 && (
+                                  <div className="absolute -top-1 -right-1">
+                                    <Trophy
+                                      className={`h-4 w-4 ${
+                                        rank === 1 ? "text-yellow-500" :
+                                        rank === 2 ? "text-gray-400" :
+                                        "text-orange-600"
+                                      }`}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Info */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2 mb-2">
+                                  <div className="min-w-0">
+                                    <div className="font-semibold truncate" data-testid={`text-username-${trader.id}`}>
+                                      {trader.username}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      #{rank}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div>
+                                    <div className="text-muted-foreground mb-0.5">Balance</div>
+                                    <div className="font-mono font-semibold" data-testid={`text-balance-${trader.id}`}>
+                                      {formatWB(balance)} WB
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted-foreground mb-0.5">Earned</div>
+                                    <div className="font-mono font-semibold text-green-600 dark:text-green-400">
+                                      {formatWB(earnings)} WB
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    );
+                  }
+
+                  // Detailed view (original)
                   return (
                     <Link key={trader.id} href={`/users/${trader.id}`}>
                       <div
@@ -160,7 +330,7 @@ export default function Traders() {
                             {formatWB(balance)} WB
                           </div>
                         </div>
-                        
+
                         <div className="text-right">
                           <div className="flex items-center gap-1 text-sm text-muted-foreground mb-1">
                             <TrendingUp className="h-3 w-3" />
@@ -181,7 +351,7 @@ export default function Traders() {
         </Card>
 
         {/* Pagination */}
-        {!isLoading && filteredTraders.length > 0 && (
+        {!isLoading && sortedTraders.length > 0 && (
           <div className="mt-6 flex items-center justify-center gap-2">
             <Button
               variant="outline"
@@ -199,7 +369,7 @@ export default function Traders() {
               variant="outline"
               size="icon"
               onClick={() => setPage(page + 1)}
-              disabled={filteredTraders.length < limit}
+              disabled={sortedTraders.length < limit}
               data-testid="button-next-page"
             >
               <ChevronRight className="h-4 w-4" />

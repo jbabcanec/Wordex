@@ -122,8 +122,8 @@ export function IpoBuyModal({ open, onOpenChange, word, userBalance }: IpoBuyMod
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" data-testid="modal-ipo-buy">
-        <DialogHeader>
+      <DialogContent className="flex flex-col sm:max-w-md max-h-[calc(100dvh-2rem)] p-0" data-testid="modal-ipo-buy">
+        <DialogHeader className="flex-shrink-0 px-6 pt-6">
           <div className="flex items-center gap-2 mb-2">
             <div className="p-2 rounded-md bg-blue-500/10">
               <Flame className="h-5 w-5 text-blue-500" />
@@ -139,7 +139,8 @@ export function IpoBuyModal({ open, onOpenChange, word, userBalance }: IpoBuyMod
           </div>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
+          <div className="space-y-4 mt-4">
           {/* IPO Info */}
           <div className="grid grid-cols-2 gap-3 p-4 rounded-md bg-blue-500/5 border border-blue-500/20">
             <div>
@@ -232,6 +233,7 @@ export function IpoBuyModal({ open, onOpenChange, word, userBalance }: IpoBuyMod
             >
               {buyMutation.isPending ? "Processing..." : "Buy Shares"}
             </Button>
+          </div>
           </div>
         </div>
       </DialogContent>

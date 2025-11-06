@@ -191,8 +191,8 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="modal-trade">
-        <DialogHeader>
+      <DialogContent className="flex flex-col sm:max-w-2xl max-h-[calc(100dvh-2rem)] p-0" data-testid="modal-trade">
+        <DialogHeader className="flex-shrink-0 px-6 pt-6">
           <div className="flex items-center justify-between">
             <div>
               <DialogTitle className="font-display text-2xl font-bold tracking-wide">
@@ -213,7 +213,8 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
           </div>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
           {/* Order Book */}
           <div className="space-y-3">
             <h3 className="font-semibold text-sm flex items-center gap-2">
@@ -437,6 +438,7 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
                 </div>
               </TabsContent>
             </Tabs>
+          </div>
           </div>
         </div>
       </DialogContent>

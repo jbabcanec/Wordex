@@ -82,16 +82,16 @@ export function SubmitWordModal({ open, onOpenChange }: SubmitWordModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col p-0">
-        <div className="overflow-y-auto flex-1 px-6 pt-6">
-          <DialogHeader className="pb-4">
-            <DialogTitle className="font-display text-xl sm:text-2xl">Submit a Word</DialogTitle>
-            <DialogDescription className="text-sm">
-              Submit any word to the marketplace. Cost: {costInWB} WB
-            </DialogDescription>
-          </DialogHeader>
+      <DialogContent className="sm:max-w-md max-h-[calc(100dvh-2rem)] flex flex-col p-0">
+        <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4">
+          <DialogTitle className="font-display text-xl sm:text-2xl">Submit a Word</DialogTitle>
+          <DialogDescription className="text-sm">
+            Submit any word to the marketplace. Cost: {costInWB} WB
+          </DialogDescription>
+        </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 pb-4">
+        <div className="overflow-y-auto flex-1 px-6">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 pb-4">
           <div className="space-y-2 sm:space-y-3">
             <Label htmlFor="word" className="text-sm font-medium">
               Word or Phrase
@@ -139,10 +139,10 @@ export function SubmitWordModal({ open, onOpenChange }: SubmitWordModalProps) {
             </div>
           </div>
 
-        </form>
+          </form>
         </div>
-        
-        <div className="sticky bottom-0 bg-background border-t px-6 py-4">
+
+        <div className="flex-shrink-0 bg-background border-t px-6 py-4">
           <div className="flex gap-2 sm:gap-3 justify-end">
             <Button
               type="button"

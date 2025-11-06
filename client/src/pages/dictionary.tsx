@@ -23,6 +23,9 @@ import {
   Filter,
   Clock,
   TrendingUp,
+  ArrowUpDown,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import type { Word } from "@shared/schema";
 
@@ -31,6 +34,8 @@ export default function Dictionary() {
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("newest");
+  const [viewMode, setViewMode] = useState<"compact" | "detailed">("compact");
   const limit = 50;
 
   const { data: words, isLoading } = useQuery<Word[]>({
@@ -49,24 +54,53 @@ export default function Dictionary() {
 
   const userBalance = parseFloat(user.wbBalance);
 
-  // Filter words based on search and status
+  // Filter and sort words
   const filteredWords = words?.filter((word) => {
-    const matchesSearch = searchQuery === "" || 
+    const matchesSearch = searchQuery === "" ||
       word.textNormalized.toLowerCase().includes(searchQuery.toLowerCase()) ||
       word.displayText.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesStatus = statusFilter === "all" ||
       (statusFilter === "ipo" && word.ipoStatus === "IPO_ACTIVE") ||
       (statusFilter === "trading" && word.ipoStatus === "TRADING") ||
       (statusFilter === "failed" && word.ipoStatus === "IPO_FAILED");
-    
+
     return matchesSearch && matchesStatus;
   }) || [];
+
+  // Sort words
+  const sortedWords = [...filteredWords].sort((a, b) => {
+    switch (sortBy) {
+      case "alphabetical":
+        return a.textNormalized.localeCompare(b.textNormalized);
+      case "price-high":
+        return parseFloat(b.currentPrice) - parseFloat(a.currentPrice);
+      case "price-low":
+        return parseFloat(a.currentPrice) - parseFloat(b.currentPrice);
+      case "market-cap":
+        return parseFloat(b.marketCap || "0") - parseFloat(a.marketCap || "0");
+      case "volume":
+        return (b.tradeCount || 0) - (a.tradeCount || 0);
+      case "newest":
+      default:
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    }
+  });
+
+  // Alphabet groups for quick navigation
+  const alphabetGroups = sortedWords.reduce((acc, word) => {
+    const firstLetter = word.textNormalized[0]?.toUpperCase() || "#";
+    if (!acc[firstLetter]) acc[firstLetter] = [];
+    acc[firstLetter].push(word);
+    return acc;
+  }, {} as Record<string, typeof sortedWords>);
+
+  const availableLetters = Object.keys(alphabetGroups).sort();
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="md:sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container max-w-screen-2xl mx-auto px-3 sm:px-6">
           <div className="flex h-16 items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -90,32 +124,92 @@ export default function Dictionary() {
       </header>
 
       <main className="container max-w-screen-2xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
-        {/* Filters */}
+        {/* Filters & Controls */}
         <Card className="mb-6">
           <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search words..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                  data-testid="input-search-words"
-                />
+            <div className="flex flex-col gap-4">
+              {/* Search and View Toggle */}
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search words..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                    data-testid="input-search-words"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant={viewMode === "compact" ? "default" : "outline"}
+                    size="icon"
+                    onClick={() => setViewMode("compact")}
+                    data-testid="button-compact-view"
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant={viewMode === "detailed" ? "default" : "outline"}
+                    size="icon"
+                    onClick={() => setViewMode("detailed")}
+                    data-testid="button-detailed-view"
+                  >
+                    <List className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-48" data-testid="select-status-filter">
-                  <Filter className="h-4 w-4 mr-2" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="ipo">IPO Active</SelectItem>
-                  <SelectItem value="trading">Trading</SelectItem>
-                  <SelectItem value="failed">Failed IPO</SelectItem>
-                </SelectContent>
-              </Select>
+
+              {/* Filters and Sort */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full sm:w-48" data-testid="select-status-filter">
+                    <Filter className="h-4 w-4 mr-2" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="ipo">IPO Active</SelectItem>
+                    <SelectItem value="trading">Trading</SelectItem>
+                    <SelectItem value="failed">Failed IPO</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-full sm:w-48" data-testid="select-sort">
+                    <ArrowUpDown className="h-4 w-4 mr-2" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">Newest First</SelectItem>
+                    <SelectItem value="alphabetical">Alphabetical</SelectItem>
+                    <SelectItem value="price-high">Price: High to Low</SelectItem>
+                    <SelectItem value="price-low">Price: Low to High</SelectItem>
+                    <SelectItem value="market-cap">Market Cap</SelectItem>
+                    <SelectItem value="volume">Most Traded</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Alphabet Quick Jump */}
+              {sortBy === "alphabetical" && availableLetters.length > 0 && (
+                <div className="flex flex-wrap gap-1 pt-2 border-t">
+                  {availableLetters.map((letter) => (
+                    <Button
+                      key={letter}
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-xs"
+                      onClick={() => {
+                        const element = document.getElementById(`letter-${letter}`);
+                        element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }}
+                    >
+                      {letter}
+                    </Button>
+                  ))}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -155,17 +249,17 @@ export default function Dictionary() {
                  statusFilter === "trading" ? "Trading Words" :
                  "Failed IPOs"}
               </CardTitle>
-              <Badge variant="secondary">{filteredWords.length} Results</Badge>
+              <Badge variant="secondary">{sortedWords.length} Results</Badge>
             </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className={viewMode === "compact" ? "grid grid-cols-1 md:grid-cols-2 gap-3" : "space-y-3"}>
                 {[...Array(8)].map((_, i) => (
                   <div key={i} className="h-32 rounded-md bg-muted/30 animate-pulse" />
                 ))}
               </div>
-            ) : filteredWords.length === 0 ? (
+            ) : sortedWords.length === 0 ? (
               <div className="text-center py-16 px-6">
                 <div className="p-4 rounded-full bg-primary/10 w-fit mx-auto mb-4">
                   <BookOpen className="h-10 w-10 text-primary" />
@@ -177,15 +271,36 @@ export default function Dictionary() {
                   {searchQuery ? "Try adjusting your search query" : "Be the first to submit a word!"}
                 </p>
               </div>
+            ) : sortBy === "alphabetical" ? (
+              <div className="space-y-6">
+                {availableLetters.map((letter) => (
+                  <div key={letter} id={`letter-${letter}`}>
+                    <div className="md:sticky top-16 z-10 bg-background/95 backdrop-blur py-2 mb-3 border-b">
+                      <h3 className="text-2xl font-bold font-mono text-primary">{letter}</h3>
+                    </div>
+                    <div className={viewMode === "compact" ? "grid grid-cols-1 md:grid-cols-2 gap-3" : "space-y-3"}>
+                      {alphabetGroups[letter].map((word) => (
+                        <WordCard
+                          key={word.id}
+                          word={word}
+                          userBalance={userBalance}
+                          userShares={0}
+                          compact={viewMode === "compact"}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : (
-              <div className="space-y-3">
-                {filteredWords.map((word) => (
+              <div className={viewMode === "compact" ? "grid grid-cols-1 md:grid-cols-2 gap-3" : "space-y-3"}>
+                {sortedWords.map((word) => (
                   <WordCard
                     key={word.id}
                     word={word}
                     userBalance={userBalance}
                     userShares={0}
-                    compact={false}
+                    compact={viewMode === "compact"}
                   />
                 ))}
               </div>
@@ -194,7 +309,7 @@ export default function Dictionary() {
         </Card>
 
         {/* Pagination */}
-        {!isLoading && filteredWords.length > 0 && (
+        {!isLoading && sortedWords.length > 0 && (
           <div className="mt-6 flex items-center justify-center gap-2">
             <Button
               variant="outline"
@@ -212,7 +327,7 @@ export default function Dictionary() {
               variant="outline"
               size="icon"
               onClick={() => setPage(page + 1)}
-              disabled={filteredWords.length < limit}
+              disabled={sortedWords.length < limit}
               data-testid="button-next-page"
             >
               <ChevronRight className="h-4 w-4" />
