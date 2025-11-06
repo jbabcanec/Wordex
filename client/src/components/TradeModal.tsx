@@ -100,8 +100,8 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           wordId: word.id,
-          side,
-          orderType,
+          side: side.toUpperCase(),
+          orderType: orderType.toUpperCase(),
           quantity: numShares,
           limitPrice: orderType === "limit" ? limitPriceNum : undefined,
         }),
