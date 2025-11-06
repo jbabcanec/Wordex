@@ -8,6 +8,7 @@ import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
 import Dictionary from "@/pages/dictionary";
 import Traders from "@/pages/traders";
+import UserProfile from "@/pages/user-profile";
 import Transactions from "@/pages/transactions";
 import NotFound from "@/pages/not-found";
 
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/" component={Dashboard} />
       <Route path="/dictionary" component={Dictionary} />
       <Route path="/traders" component={Traders} />
+      <Route path="/users/:id" component={UserProfile} />
       <Route path="/transactions" component={Transactions} />
       <Route component={NotFound} />
     </Switch>

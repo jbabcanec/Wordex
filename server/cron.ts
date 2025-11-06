@@ -1,8 +1,8 @@
 import cron from 'node-cron';
 import { storage } from './storage';
 import { db } from './db';
-import { words, holdings, vestingSchedules, users, transactions, trades } from '@shared/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { words, holdings, vestingSchedules, users, transactions, trades, orders } from '@shared/schema';
+import { eq, and, sql, or } from 'drizzle-orm';
 import {
   IPO_DURATION_HOURS,
   IPO_END_PRICE,
@@ -10,6 +10,7 @@ import {
   calculateIpoPrice,
   calculateVestingUnlocked,
 } from '@shared/constants';
+import { matchOrders } from './routes';
 
 // Refund all participants of a failed IPO
 async function refundFailedIpo(wordId: string) {
@@ -185,10 +186,60 @@ export function setupVestingUnlocks() {
   console.log('[CRON] Vesting unlock job scheduled (runs daily at midnight)');
 }
 
+// Continuous order matching - retries matching all open orders
+export function setupContinuousOrderMatching() {
+  // Run every minute
+  cron.schedule('* * * * *', async () => {
+    try {
+      console.log('[CRON] Running continuous order matching...');
+
+      // Get all words with OPEN or PARTIALLY_FILLED orders
+      const wordsWithOrders = await db
+        .select({ wordId: orders.wordId })
+        .from(orders)
+        .where(or(
+          eq(orders.status, 'OPEN'),
+          eq(orders.status, 'PARTIALLY_FILLED')
+        ))
+        .groupBy(orders.wordId);
+
+      let matchAttempts = 0;
+
+      for (const { wordId } of wordsWithOrders) {
+        // Get all OPEN/PARTIALLY_FILLED orders for this word, ordered by time priority
+        const openOrders = await db
+          .select()
+          .from(orders)
+          .where(and(
+            eq(orders.wordId, wordId),
+            or(
+              eq(orders.status, 'OPEN'),
+              eq(orders.status, 'PARTIALLY_FILLED')
+            )
+          ))
+          .orderBy(orders.createdAt); // Time priority (FIFO)
+
+        // Try to match each order
+        for (const order of openOrders) {
+          await matchOrders(wordId, order.id);
+          matchAttempts++;
+        }
+      }
+
+      console.log(`[CRON] Continuous matching complete. Attempted matching for ${matchAttempts} orders across ${wordsWithOrders.length} words.`);
+    } catch (error) {
+      console.error('[CRON] Error in continuous order matching:', error);
+    }
+  });
+
+  console.log('[CRON] Continuous order matching job scheduled (runs every minute)');
+}
+
 // Initialize all cron jobs
 export function initializeCronJobs() {
   console.log('[CRON] Initializing scheduled jobs...');
   setupIpoPriceUpdates();
   setupVestingUnlocks();
+  setupContinuousOrderMatching();
   console.log('[CRON] All cron jobs initialized successfully');
 }

@@ -562,6 +562,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Try to match the order immediately
       await matchOrders(wordId, result.order.id);
 
+      // For market orders, fail-fast if they didn't fully fill
+      if (orderType === 'MARKET') {
+        const [updatedOrder] = await db
+          .select()
+          .from(orders)
+          .where(eq(orders.id, result.order.id));
+
+        if (updatedOrder && (updatedOrder.status === 'OPEN' || updatedOrder.status === 'PARTIALLY_FILLED')) {
+          // Market order didn't fully fill - cancel it
+          await db.transaction(async (tx) => {
+            // If sell order, unlock remaining shares
+            if (side === 'SELL' && updatedOrder.remainingQuantity > 0) {
+              const [holding] = await tx
+                .select()
+                .from(holdings)
+                .where(and(eq(holdings.userId, userId), eq(holdings.wordId, wordId)))
+                .for('update');
+
+              if (holding) {
+                await tx
+                  .update(holdings)
+                  .set({
+                    availableQuantity: holding.availableQuantity + updatedOrder.remainingQuantity,
+                    lockedQuantity: holding.lockedQuantity - updatedOrder.remainingQuantity,
+                    updatedAt: new Date(),
+                  })
+                  .where(eq(holdings.id, holding.id));
+              }
+            }
+
+            // Cancel the order
+            await tx
+              .update(orders)
+              .set({ status: 'CANCELLED', updatedAt: new Date() })
+              .where(eq(orders.id, updatedOrder.id));
+          });
+
+          const filledQty = updatedOrder.filledQuantity;
+          const cancelledQty = updatedOrder.remainingQuantity;
+
+          if (filledQty > 0) {
+            throw new Error(`Market order partially filled: ${filledQty} shares executed, ${cancelledQty} shares cancelled. No ${side === 'BUY' ? 'sellers' : 'buyers'} available for remaining quantity.`);
+          } else {
+            throw new Error(`Market order failed: No ${side === 'BUY' ? 'sellers' : 'buyers'} available. Use a limit order instead.`);
+          }
+        }
+      }
+
       res.json(result);
     } catch (error: any) {
       console.error("Error placing order:", error);
@@ -944,7 +992,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }
 
 // Order matching engine (simplified version)
-async function matchOrders(wordId: string, newOrderId: string) {
+export async function matchOrders(wordId: string, newOrderId: string) {
   try {
     const newOrder = await storage.getOrder(newOrderId);
     if (!newOrder || newOrder.status === 'FILLED' || newOrder.status === 'CANCELLED') {
