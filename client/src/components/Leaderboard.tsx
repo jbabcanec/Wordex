@@ -3,7 +3,7 @@ import { formatWB } from "@/lib/utils";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Trophy, Medal, Award, ArrowRight } from "lucide-react";
+import { Trophy, Medal, Award, ArrowRight, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface LeaderboardEntry {
@@ -15,7 +15,12 @@ interface LeaderboardEntry {
   rank: number;
 }
 
-export function Leaderboard() {
+interface LeaderboardProps {
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
+}
+
+export function Leaderboard({ collapsed = false, onToggleCollapsed }: LeaderboardProps = {}) {
   const { data: entries, isLoading } = useQuery<LeaderboardEntry[]>({
     queryKey: ["/api/leaderboard"],
     refetchInterval: 30000, // Refresh every 30 seconds
@@ -25,8 +30,24 @@ export function Leaderboard() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="font-display">Leaderboard</CardTitle>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CardTitle className="font-display">Leaderboard</CardTitle>
+              {onToggleCollapsed && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onToggleCollapsed}
+                  className="h-8 w-8 p-0"
+                  data-testid="button-toggle-leaderboard"
+                >
+                  {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                </Button>
+              )}
+            </div>
+          </div>
         </CardHeader>
+        {!collapsed && (
         <CardContent>
           <div className="space-y-2">
             {[...Array(5)].map((_, i) => (
@@ -34,6 +55,7 @@ export function Leaderboard() {
             ))}
           </div>
         </CardContent>
+        )}
       </Card>
     );
   }
@@ -42,8 +64,24 @@ export function Leaderboard() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="font-display">Top Traders</CardTitle>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CardTitle className="font-display">Top Traders</CardTitle>
+              {onToggleCollapsed && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onToggleCollapsed}
+                  className="h-8 w-8 p-0"
+                  data-testid="button-toggle-leaderboard"
+                >
+                  {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                </Button>
+              )}
+            </div>
+          </div>
         </CardHeader>
+        {!collapsed && (
         <CardContent>
           <div className="text-center py-12 px-6">
             <div className="p-4 rounded-full bg-muted/30 w-fit mx-auto mb-4">
@@ -55,6 +93,7 @@ export function Leaderboard() {
             </p>
           </div>
         </CardContent>
+        )}
       </Card>
     );
   }
@@ -74,7 +113,20 @@ export function Leaderboard() {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="font-display">Top 10 Traders</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="font-display">Top 10 Traders</CardTitle>
+            {onToggleCollapsed && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onToggleCollapsed}
+                className="h-8 w-8 p-0"
+                data-testid="button-toggle-leaderboard"
+              >
+                {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+              </Button>
+            )}
+          </div>
           <Link href="/traders">
             <Button variant="ghost" size="sm" data-testid="button-browse-traders">
               Browse All <ArrowRight className="h-4 w-4 ml-1" />
@@ -82,6 +134,7 @@ export function Leaderboard() {
           </Link>
         </div>
       </CardHeader>
+      {!collapsed && (
       <CardContent>
         <div className="space-y-2">
           {entries.slice(0, 10).map((entry) => (
@@ -128,6 +181,7 @@ export function Leaderboard() {
           ))}
         </div>
       </CardContent>
+      )}
     </Card>
   );
 }

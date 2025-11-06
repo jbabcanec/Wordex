@@ -13,10 +13,10 @@ import { Leaderboard } from "@/components/Leaderboard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { 
-  TrendingUp, 
-  Plus, 
-  LogOut, 
+import {
+  TrendingUp,
+  Plus,
+  LogOut,
   User,
   Wallet,
   BarChart3,
@@ -25,6 +25,8 @@ import {
   Users,
   ArrowRight,
   Clock,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import type { Word } from "@shared/schema";
 
@@ -38,6 +40,8 @@ export default function Dashboard() {
   const [submitWordModalOpen, setSubmitWordModalOpen] = useState(false);
   const shouldShowTour = useShouldShowTour(user);
   const [tourOpen, setTourOpen] = useState(false);
+  const [topWordsCollapsed, setTopWordsCollapsed] = useState(false);
+  const [leaderboardCollapsed, setLeaderboardCollapsed] = useState(false);
 
   const { data: topWords, isLoading: topWordsLoading } = useQuery<WordWithHolding[]>({
     queryKey: ["/api/words/top"],
@@ -270,7 +274,18 @@ export default function Dashboard() {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="font-display">Top 10 Words</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="font-display">Top 10 Words</CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setTopWordsCollapsed(!topWordsCollapsed)}
+                      className="h-8 w-8 p-0"
+                      data-testid="button-toggle-top-words"
+                    >
+                      {topWordsCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                    </Button>
+                  </div>
                   <Link href="/dictionary">
                     <Button variant="ghost" size="sm" data-testid="button-browse-words">
                       Browse All <ArrowRight className="h-4 w-4 ml-1" />
@@ -278,6 +293,7 @@ export default function Dashboard() {
                   </Link>
                 </div>
               </CardHeader>
+              {!topWordsCollapsed && (
               <CardContent>
                 {topWordsLoading ? (
                   <div className="space-y-3">
@@ -321,6 +337,7 @@ export default function Dashboard() {
                   </div>
                 )}
               </CardContent>
+              )}
             </Card>
 
             {/* Portfolio */}
@@ -332,7 +349,10 @@ export default function Dashboard() {
 
           {/* Right Column - Leaderboard */}
           <div className="space-y-6">
-            <Leaderboard />
+            <Leaderboard
+              collapsed={leaderboardCollapsed}
+              onToggleCollapsed={() => setLeaderboardCollapsed(!leaderboardCollapsed)}
+            />
           </div>
         </div>
       </main>

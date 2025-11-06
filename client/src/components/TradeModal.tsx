@@ -35,6 +35,7 @@ interface TradeModalProps {
     currentPrice: string;
     outstandingShares?: number;
     totalShares: number;
+    ipoStatus?: string;
   };
   userBalance: number;
   userShares: number;
@@ -80,6 +81,17 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
   const estimatedCost = numShares * estimatedPrice;
   const fee = estimatedCost * TRADING_FEE_PERCENT;
   const totalCost = side === "buy" ? estimatedCost + fee : estimatedCost - fee;
+
+  // Check if selling is allowed (not allowed during IPO)
+  const isIpoActive = word.ipoStatus === 'IPO_ACTIVE';
+  const canSell = !isIpoActive;
+
+  // Auto-switch to buy if user tries to sell during IPO
+  useEffect(() => {
+    if (isIpoActive && side === "sell") {
+      setSide("buy");
+    }
+  }, [isIpoActive, side]);
 
   // Auto-switch to limit order if market order becomes unavailable
   useEffect(() => {
@@ -277,10 +289,19 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
                 <TabsTrigger value="buy" className="data-[state=active]:bg-green-600 data-[state=active]:text-white min-h-[44px] sm:min-h-0" data-testid="tab-buy">
                   Buy
                 </TabsTrigger>
-                <TabsTrigger value="sell" className="data-[state=active]:bg-red-600 data-[state=active]:text-white min-h-[44px] sm:min-h-0" data-testid="tab-sell">
-                  Sell
+                <TabsTrigger value="sell" disabled={!canSell} className="data-[state=active]:bg-red-600 data-[state=active]:text-white min-h-[44px] sm:min-h-0" data-testid="tab-sell">
+                  Sell {!canSell && "(IPO Active)"}
                 </TabsTrigger>
               </TabsList>
+
+              {isIpoActive && (
+                <Alert className="mt-4 bg-blue-500/10 border-blue-500/30">
+                  <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-500" />
+                  <AlertDescription className="text-xs">
+                    Selling is disabled during IPO period. Shares can only be sold once the IPO completes or fails.
+                  </AlertDescription>
+                </Alert>
+              )}
 
               <TabsContent value={side} className="space-y-4 mt-4">
                 {/* Order Type */}
