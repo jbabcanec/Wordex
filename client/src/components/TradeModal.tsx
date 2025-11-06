@@ -67,13 +67,16 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
   const numShares = parseInt(shares) || 0;
   const limitPriceNum = parseFloat(limitPrice) || 0;
 
-  // Calculate market order preview
+  // Calculate order book data
   const bestBid = orderBook?.bids?.[0]?.price ? parseFloat(orderBook.bids[0].price) : 0;
   const bestAsk = orderBook?.asks?.[0]?.price ? parseFloat(orderBook.asks[0].price) : 0;
   const spread = bestAsk && bestBid ? bestAsk - bestBid : 0;
   const spreadPercent = bestBid > 0 ? (spread / bestBid) * 100 : 0;
 
-  const estimatedPrice = side === "buy" ? bestAsk : bestBid;
+  // Use limit price for limit orders, market price for market orders
+  const estimatedPrice = orderType === "limit"
+    ? limitPriceNum
+    : (side === "buy" ? bestAsk : bestBid);
   const estimatedCost = numShares * estimatedPrice;
   const fee = estimatedCost * TRADING_FEE_PERCENT;
   const totalCost = side === "buy" ? estimatedCost + fee : estimatedCost - fee;
