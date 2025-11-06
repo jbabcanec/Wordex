@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { TrendingUp, TrendingDown, Minus, Clock, CheckCircle2, XCircle, Flame } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Clock, CheckCircle2, XCircle, Flame, AlertTriangle } from "lucide-react";
 import { formatWB, formatPercentage } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { TradeModal } from "./TradeModal";
 import { IpoBuyModal } from "./IpoBuyModal";
+import { MIN_IPO_SHARES_SOLD, IPO_SHARES } from "@shared/constants";
 
 interface WordCardProps {
   word: {
@@ -57,9 +58,17 @@ export function WordCard({ word, userBalance, userShares, compact = false }: Wor
   const isNegative = change < 0;
 
   // IPO progress
-  const ipoProgress = isIpoActive && word.ipoSharesOffered && word.ipoSharesSold 
-    ? (word.ipoSharesSold / word.ipoSharesOffered) * 100 
+  const ipoProgress = isIpoActive && word.ipoSharesOffered && word.ipoSharesSold
+    ? (word.ipoSharesSold / word.ipoSharesOffered) * 100
     : 0;
+
+  // IPO success threshold tracking
+  const ipoSharesSold = word.ipoSharesSold || 0;
+  const ipoThresholdProgress = isIpoActive
+    ? (ipoSharesSold / MIN_IPO_SHARES_SOLD) * 100
+    : 0;
+  const isAtRisk = isIpoActive && ipoSharesSold < MIN_IPO_SHARES_SOLD;
+  const ipoSuccessPercent = Math.min(ipoThresholdProgress, 100);
 
   if (compact) {
     return (
@@ -81,17 +90,18 @@ export function WordCard({ word, userBalance, userShares, compact = false }: Wor
         >
           <div className="flex items-center justify-between sm:justify-start gap-3 flex-1">
             <div className="flex flex-col flex-1 min-w-0">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-mono font-bold text-sm sm:text-base tracking-wider truncate">
                   {word.textNormalized}
                 </span>
                 {isIpoActive && <Badge variant="secondary" className="bg-blue-500/20 text-blue-700 dark:text-blue-300 text-[10px] px-1.5 py-0"><Flame className="h-3 w-3 mr-0.5" />IPO</Badge>}
+                {isIpoActive && isAtRisk && <Badge variant="destructive" className="text-[10px] px-1.5 py-0"><AlertTriangle className="h-3 w-3 mr-0.5" />At Risk</Badge>}
                 {isTrading && <Badge variant="secondary" className="bg-green-500/20 text-green-700 dark:text-green-300 text-[10px] px-1.5 py-0"><CheckCircle2 className="h-3 w-3 mr-0.5" />Live</Badge>}
                 {isFailed && <Badge variant="destructive" className="text-[10px] px-1.5 py-0"><XCircle className="h-3 w-3 mr-0.5" />Failed</Badge>}
               </div>
               <span className="text-xs text-muted-foreground">
-                {isIpoActive 
-                  ? `${word.ipoSharesSold || 0}/${word.ipoSharesOffered || 0} sold`
+                {isIpoActive
+                  ? `${ipoSharesSold}/${MIN_IPO_SHARES_SOLD} to succeed (${ipoSuccessPercent.toFixed(0)}%)`
                   : `${(word.outstandingShares || 0).toLocaleString()} / ${word.totalShares.toLocaleString()} shares`
                 }
               </span>
@@ -191,8 +201,17 @@ export function WordCard({ word, userBalance, userShares, compact = false }: Wor
 
           {/* IPO Progress Bar */}
           {isIpoActive && (
-            <div className="w-full sm:hidden">
-              <Progress value={ipoProgress} className="h-1.5" />
+            <div className="w-full sm:hidden space-y-1">
+              <Progress
+                value={ipoSuccessPercent}
+                className={cn("h-1.5", isAtRisk && "bg-red-100 dark:bg-red-950")}
+              />
+              {isAtRisk && (
+                <p className="text-[10px] text-red-600 dark:text-red-400 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  Needs {MIN_IPO_SHARES_SOLD - ipoSharesSold} more shares to succeed
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -241,22 +260,34 @@ export function WordCard({ word, userBalance, userShares, compact = false }: Wor
           <div className="space-y-4">
             <div className="flex items-start justify-between">
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-mono font-bold text-2xl tracking-wider">
                     {word.textNormalized}
                   </h3>
                   {isIpoActive && <Badge className="bg-blue-600 hover:bg-blue-700"><Flame className="h-3 w-3 mr-1" />IPO LIVE</Badge>}
+                  {isIpoActive && isAtRisk && <Badge variant="destructive"><AlertTriangle className="h-3 w-3 mr-1" />At Risk</Badge>}
                   {isTrading && <Badge className="bg-green-600 hover:bg-green-700"><CheckCircle2 className="h-3 w-3 mr-1" />Trading</Badge>}
                   {isFailed && <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />IPO Failed</Badge>}
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {isIpoActive 
-                    ? `${word.ipoSharesSold || 0} of ${word.ipoSharesOffered || 0} IPO shares sold`
+                  {isIpoActive
+                    ? `${ipoSharesSold} of ${MIN_IPO_SHARES_SOLD} minimum shares sold (${ipoSuccessPercent.toFixed(0)}% to success)`
                     : `${(word.outstandingShares || 0).toLocaleString()} of ${word.totalShares.toLocaleString()} shares outstanding`
                   }
                 </p>
                 {isIpoActive && (
-                  <Progress value={ipoProgress} className="h-2 w-48" />
+                  <div className="space-y-1">
+                    <Progress
+                      value={ipoSuccessPercent}
+                      className={cn("h-2 w-48", isAtRisk && "bg-red-100 dark:bg-red-950")}
+                    />
+                    {isAtRisk && (
+                      <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Needs {MIN_IPO_SHARES_SOLD - ipoSharesSold} more shares to succeed. IPO will refund all buyers if threshold not met.
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
               {isTrading && word.change24h !== undefined && (

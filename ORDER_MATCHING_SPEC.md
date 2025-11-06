@@ -542,6 +542,20 @@ Need to implement:
 
 **Result:** Market orders execute immediately or fail with clear message. No more "pending" market orders.
 
+### FIX-MATCH-07: IPO Threshold Progress Warnings ✅ COMPLETED
+**Files Modified:** client/src/components/WordCard.tsx
+
+**Changes:**
+- Added import for MIN_IPO_SHARES_SOLD and AlertTriangle icon
+- Calculate ipoSuccessPercent (progress toward 490 share minimum)
+- Show "At Risk" badge when below threshold
+- Display progress as "X/490 to succeed (Y%)" instead of "X/980 sold"
+- Progress bar turns red when at risk
+- Warning message: "Needs X more shares to succeed"
+- Full explanation in expanded view about refund process
+
+**Result:** Users now understand IPO success requirements and can see if IPO is at risk of failure.
+
 ---
 
 ## 🎯 Implementation Order
