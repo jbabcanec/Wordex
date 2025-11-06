@@ -8,6 +8,7 @@ import { SubmitWordModal } from "@/components/SubmitWordModal";
 import { WelcomeTour, useShouldShowTour } from "@/components/WelcomeTour";
 import { WordCard } from "@/components/WordCard";
 import { Portfolio } from "@/components/Portfolio";
+import { MyOrders } from "@/components/MyOrders";
 import { Leaderboard } from "@/components/Leaderboard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -322,6 +323,9 @@ export default function Dashboard() {
 
             {/* Portfolio */}
             <Portfolio />
+
+            {/* Open Orders */}
+            <MyOrders />
           </div>
 
           {/* Right Column - Leaderboard */}

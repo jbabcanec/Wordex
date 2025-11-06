@@ -747,8 +747,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/orders/my', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const myOrders = await storage.getUserOrders(userId);
-      res.json(myOrders);
+
+      // Get orders with word data joined
+      const userOrders = await db
+        .select({
+          order: orders,
+          word: words,
+        })
+        .from(orders)
+        .innerJoin(words, eq(orders.wordId, words.id))
+        .where(
+          and(
+            eq(orders.userId, userId),
+            or(
+              eq(orders.status, 'OPEN'),
+              eq(orders.status, 'PARTIALLY_FILLED')
+            )
+          )
+        )
+        .orderBy(desc(orders.createdAt));
+
+      res.json(userOrders);
     } catch (error) {
       console.error("Error fetching user orders:", error);
       res.status(500).json({ message: "Failed to fetch orders" });
