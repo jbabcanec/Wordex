@@ -469,6 +469,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const { wordId, side, orderType, quantity, limitPrice } = req.body;
 
+      console.log('📝 Order request:', { userId, wordId, side, orderType, quantity, limitPrice });
+
       if (!wordId || !side || !orderType || !quantity) {
         return res.status(400).json({ message: "Missing required fields" });
       }
@@ -497,10 +499,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .for('update');
 
         if (!word) {
+          console.log('❌ Word not found:', wordId);
           throw new Error("Word not found");
         }
 
+        console.log('✅ Word found:', { id: word.id, name: word.textNormalized, ipoStatus: word.ipoStatus });
+
         if (word.ipoStatus !== 'TRADING') {
+          console.log('❌ Word not trading:', { ipoStatus: word.ipoStatus });
           throw new Error("Word is not trading yet. Wait for IPO to complete.");
         }
 
@@ -511,15 +517,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .for('update');
 
         if (!user) {
+          console.log('❌ User not found:', userId);
           throw new Error("User not found");
         }
+
+        console.log('✅ User found:', { username: user.username, balance: user.wbBalance });
 
         if (side === 'BUY') {
           const estimatedPrice = orderType === 'MARKET' ? parseFloat(word.currentPrice) : limitPrice;
           const estimatedCost = quantity * estimatedPrice + calculateTradingFee(quantity * estimatedPrice);
           const balance = parseFloat(user.wbBalance);
-          
+
+          console.log('💰 Balance check:', { balance, estimatedCost, sufficient: balance >= estimatedCost });
+
           if (balance < estimatedCost) {
+            console.log('❌ Insufficient balance');
             throw new Error(`Insufficient balance. Need approximately ${estimatedCost.toFixed(2)} WB`);
           }
         } else {
@@ -529,7 +541,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .where(and(eq(holdings.userId, userId), eq(holdings.wordId, wordId)))
             .for('update');
 
+          console.log('📦 Holding check:', {
+            found: !!holding,
+            available: holding?.availableQuantity || 0,
+            needed: quantity
+          });
+
           if (!holding || holding.availableQuantity < quantity) {
+            console.log('❌ Insufficient shares');
             throw new Error(`Insufficient shares. You have ${holding?.availableQuantity || 0} available.`);
           }
 
@@ -541,8 +560,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               updatedAt: new Date(),
             })
             .where(eq(holdings.id, holding.id));
+
+          console.log('🔒 Shares locked');
         }
 
+        console.log('✍️ Creating order...');
         const [order] = await tx
           .insert(orders)
           .values({
@@ -556,14 +578,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
           .returning();
 
+        console.log('✅ Order created:', order.id);
         return { order };
       });
 
       // Try to match the order immediately
+      console.log('🔄 Attempting to match order...');
       await matchOrders(wordId, result.order.id);
 
       // For market orders, fail-fast if they didn't fully fill
       if (orderType === 'MARKET') {
+        console.log('⚡ Market order - checking if filled...');
         const [updatedOrder] = await db
           .select()
           .from(orders)
@@ -610,10 +635,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      console.log('✅ Order placed successfully!');
       res.json(result);
     } catch (error: any) {
-      console.error("Error placing order:", error);
-      res.status(500).json({ message: error.message || "Failed to place order" });
+      console.error("❌ Error placing order:", error.message || error);
+      res.status(500).json({ error: error.message || "Failed to place order" });
     }
   });
 
