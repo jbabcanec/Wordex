@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -77,6 +77,13 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
   const estimatedCost = numShares * estimatedPrice;
   const fee = estimatedCost * TRADING_FEE_PERCENT;
   const totalCost = side === "buy" ? estimatedCost + fee : estimatedCost - fee;
+
+  // Auto-switch to limit order if market order becomes unavailable
+  useEffect(() => {
+    if (orderType === "market" && (side === "buy" ? !bestAsk : !bestBid)) {
+      setOrderType("limit");
+    }
+  }, [orderType, side, bestAsk, bestBid]);
 
   const canAffordMarket = side === "buy" ? totalCost <= userBalance : numShares <= userShares;
   const canAffordLimit = side === "buy"
@@ -229,7 +236,7 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
                     </div>
                   ))
                 ) : (
-                  <div className="text-xs text-muted-foreground">No sell orders</div>
+                  <div className="text-xs text-muted-foreground italic">No sellers - Use limit order to be first!</div>
                 )}
               </div>
 
@@ -253,7 +260,7 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
                     </div>
                   ))
                 ) : (
-                  <div className="text-xs text-muted-foreground">No buy orders</div>
+                  <div className="text-xs text-muted-foreground italic">No buyers - Use limit order to be first!</div>
                 )}
               </div>
             </div>
@@ -280,15 +287,32 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="market">
-                        <div className="flex items-center gap-2">
-                          <Zap className="h-3 w-3" />
-                          Market Order
+                      <SelectItem value="market" disabled={side === "buy" ? !bestAsk : !bestBid}>
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <Zap className="h-3 w-3" />
+                            Market Order {(side === "buy" ? !bestAsk : !bestBid) && "(Unavailable)"}
+                          </div>
+                          <span className="text-[10px] text-muted-foreground">
+                            {(side === "buy" ? !bestAsk : !bestBid)
+                              ? `No ${side === "buy" ? "sellers" : "buyers"} available`
+                              : `Trade instantly at current price`}
+                          </span>
                         </div>
                       </SelectItem>
-                      <SelectItem value="limit">Limit Order</SelectItem>
+                      <SelectItem value="limit">
+                        <div className="flex flex-col">
+                          <span>Limit Order</span>
+                          <span className="text-[10px] text-muted-foreground">Set your price, wait for match (recommended)</span>
+                        </div>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {orderType === "market"
+                      ? "⚡ Instant trade at best available price"
+                      : "⏱️ Trade executes when someone matches your price"}
+                  </p>
                 </div>
 
                 {/* Shares */}
