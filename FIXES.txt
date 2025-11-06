@@ -462,9 +462,10 @@ DIAGNOSING ORDER FAILURES ("Order Failed" errors):
 ================================================================================
 Common causes when placing orders fails:
 
-1. Word not in TRADING status:
-   - Orders can only be placed on words with ipoStatus = 'TRADING'
-   - IPO_ACTIVE words must be bought through IPO modal
+1. Word not in tradeable status:
+   - Orders can be placed on words with ipoStatus = 'TRADING' or 'IPO_FAILED'
+   - IPO_ACTIVE words must be bought through IPO modal (not order book)
+   - Failed IPOs ARE tradeable! Users can trade their failed IPO shares
    - Check word status in database
 
 2. Insufficient balance (BUY orders):

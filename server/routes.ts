@@ -505,9 +505,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         console.log('✅ Word found:', { id: word.id, name: word.textNormalized, ipoStatus: word.ipoStatus });
 
-        if (word.ipoStatus !== 'TRADING') {
-          console.log('❌ Word not trading:', { ipoStatus: word.ipoStatus });
-          throw new Error("Word is not trading yet. Wait for IPO to complete.");
+        // Only allow trading for TRADING words, or IPO_FAILED (users can trade their failed IPO shares)
+        if (word.ipoStatus === 'IPO_ACTIVE') {
+          console.log('❌ Word still in IPO:', { ipoStatus: word.ipoStatus });
+          throw new Error("Word is in IPO. Use the IPO modal to buy shares during the IPO period.");
+        }
+
+        // TRADING and IPO_FAILED words can be traded
+        if (word.ipoStatus !== 'TRADING' && word.ipoStatus !== 'IPO_FAILED') {
+          console.log('❌ Word in invalid state for trading:', { ipoStatus: word.ipoStatus });
+          throw new Error("Word is not available for trading.");
         }
 
         const [user] = await tx
@@ -810,7 +817,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const limit = 20; // Show 20 words in ticker
 
       let orderByClause;
-      let whereCondition = eq(words.ipoStatus, 'TRADING'); // Only show trading words
+      // Show both TRADING and IPO_FAILED words (failed IPOs are still tradeable)
+      let whereCondition = or(eq(words.ipoStatus, 'TRADING'), eq(words.ipoStatus, 'IPO_FAILED'));
 
       switch (filter) {
         case 'gainers':
