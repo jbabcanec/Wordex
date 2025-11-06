@@ -505,14 +505,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         console.log('✅ Word found:', { id: word.id, name: word.textNormalized, ipoStatus: word.ipoStatus });
 
-        // Only allow trading for TRADING words, or IPO_FAILED (users can trade their failed IPO shares)
+        // Handle IPO_ACTIVE trading
         if (word.ipoStatus === 'IPO_ACTIVE') {
-          console.log('❌ Word still in IPO:', { ipoStatus: word.ipoStatus });
-          throw new Error("Word is in IPO. Use the IPO modal to buy shares during the IPO period.");
+          // Allow BUY orders (from system pool), but block SELL orders
+          if (side === 'SELL') {
+            console.log('❌ Cannot sell during IPO:', { ipoStatus: word.ipoStatus });
+            throw new Error("Cannot sell shares during IPO period. Only the system has shares available.");
+          }
+          // BUY orders are allowed - they will purchase from the system pool
+          console.log('✅ IPO_ACTIVE buy order allowed - will purchase from system pool');
         }
 
-        // TRADING and IPO_FAILED words can be traded
-        if (word.ipoStatus !== 'TRADING' && word.ipoStatus !== 'IPO_FAILED') {
+        // TRADING and IPO_FAILED words can be traded normally
+        if (word.ipoStatus !== 'TRADING' && word.ipoStatus !== 'IPO_FAILED' && word.ipoStatus !== 'IPO_ACTIVE') {
           console.log('❌ Word in invalid state for trading:', { ipoStatus: word.ipoStatus });
           throw new Error("Word is not available for trading.");
         }
@@ -1097,6 +1102,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }
 
 // Order matching engine (simplified version)
+// Execute a trade from the system IPO pool (buyer purchases from system, not another user)
+async function executeIpoTrade(buyOrder: any, quantity: number, price: number) {
+  await db.transaction(async (tx) => {
+    const totalValue = quantity * price;
+    const buyerFee = calculateTradingFee(totalValue);
+
+    const [buyer] = await tx.select().from(users).where(eq(users.id, buyOrder.userId)).for('update');
+    const [word] = await tx.select().from(words).where(eq(words.id, buyOrder.wordId)).for('update');
+
+    if (!buyer || !word) {
+      throw new Error("Missing buyer or word");
+    }
+
+    // Check if shares are available from the system
+    const sharesAvailable = word.ipoSharesOffered - word.ipoSharesSold;
+    if (sharesAvailable <= 0) {
+      throw new Error("No system shares available");
+    }
+
+    const actualQuantity = Math.min(quantity, sharesAvailable);
+
+    const buyerBalance = parseFloat(buyer.wbBalance);
+    const totalCost = (actualQuantity * price) + calculateTradingFee(actualQuantity * price);
+
+    if (buyerBalance < totalCost) {
+      throw new Error("Buyer insufficient balance");
+    }
+
+    const newBuyerBalance = (buyerBalance - totalCost).toFixed(2);
+
+    // Update buyer balance
+    await tx.update(users).set({ wbBalance: newBuyerBalance, updatedAt: new Date() }).where(eq(users.id, buyer.id));
+
+    // Update or create buyer's holding
+    const [buyerHolding] = await tx.select().from(holdings).where(and(eq(holdings.userId, buyer.id), eq(holdings.wordId, word.id))).for('update');
+
+    if (buyerHolding) {
+      const totalCost = parseFloat(buyerHolding.averageCost) * buyerHolding.quantity + (actualQuantity * price);
+      const newQuantity = buyerHolding.quantity + actualQuantity;
+      const newAvgCost = (totalCost / newQuantity).toFixed(2);
+
+      await tx.update(holdings).set({
+        quantity: newQuantity,
+        availableQuantity: buyerHolding.availableQuantity + actualQuantity,
+        averageCost: newAvgCost,
+        updatedAt: new Date(),
+      }).where(eq(holdings.id, buyerHolding.id));
+    } else {
+      await tx.insert(holdings).values({
+        userId: buyer.id,
+        wordId: word.id,
+        quantity: actualQuantity,
+        availableQuantity: actualQuantity,
+        lockedQuantity: 0,
+        averageCost: price.toFixed(2),
+      });
+    }
+
+    // Update word - increment shares sold and update price
+    const newSharesSold = word.ipoSharesSold + actualQuantity;
+    const newOutstandingShares = word.outstandingShares + actualQuantity;
+
+    await tx.update(words).set({
+      ipoSharesSold: newSharesSold,
+      outstandingShares: newOutstandingShares,
+      lastTradePrice: price.toFixed(2),
+      currentPrice: price.toFixed(2),
+      tradeCount: word.tradeCount + 1,
+      updatedAt: new Date(),
+    }).where(eq(words.id, word.id));
+
+    // Create trade record (no sellOrderId since this is from system)
+    const [trade] = await tx.insert(trades).values({
+      wordId: word.id,
+      buyerId: buyer.id,
+      sellerId: word.creatorId, // System seller is the creator
+      buyOrderId: buyOrder.id,
+      sellOrderId: null, // No sell order - this is from system pool
+      quantity: actualQuantity,
+      price: price.toFixed(2),
+      totalValue: (actualQuantity * price).toFixed(2),
+      buyerFee: calculateTradingFee(actualQuantity * price).toFixed(2),
+      sellerFee: '0.00', // No seller fee for system trades
+      isIpo: true, // Mark as IPO purchase
+    }).returning();
+
+    // Create transaction record
+    await tx.insert(transactions).values({
+      userId: buyer.id,
+      wordId: word.id,
+      tradeId: trade.id,
+      type: 'IPO_BUY',
+      quantity: actualQuantity,
+      pricePerShare: price.toFixed(2),
+      totalAmount: `-${totalCost.toFixed(2)}`,
+      fee: calculateTradingFee(actualQuantity * price).toFixed(2),
+      balanceBefore: buyer.wbBalance,
+      balanceAfter: newBuyerBalance,
+      description: `Bought ${actualQuantity} shares of ${word.textNormalized} from IPO at ${price.toFixed(2)} WB`,
+    });
+
+    // Update buy order
+    const newBuyRemaining = buyOrder.remainingQuantity - actualQuantity;
+    const newBuyFilled = buyOrder.filledQuantity + actualQuantity;
+    const newBuyStatus = newBuyRemaining <= 0 ? 'FILLED' : 'PARTIALLY_FILLED';
+
+    await tx.update(orders).set({
+      filledQuantity: newBuyFilled,
+      remainingQuantity: newBuyRemaining,
+      status: newBuyStatus,
+      updatedAt: new Date(),
+    }).where(eq(orders.id, buyOrder.id));
+
+    console.log(`✅ IPO trade executed: ${actualQuantity} shares at ${price.toFixed(2)} WB (${newSharesSold}/${word.ipoSharesOffered} sold)`);
+  });
+}
+
 export async function matchOrders(wordId: string, newOrderId: string) {
   try {
     const newOrder = await storage.getOrder(newOrderId);
@@ -1104,6 +1226,41 @@ export async function matchOrders(wordId: string, newOrderId: string) {
       return;
     }
 
+    // Check if this is a BUY order for an IPO_ACTIVE word - try to fulfill from system pool first
+    if (newOrder.side === 'BUY') {
+      const [word] = await db.select().from(words).where(eq(words.id, wordId));
+
+      if (word && word.ipoStatus === 'IPO_ACTIVE') {
+        const sharesAvailable = word.ipoSharesOffered - word.ipoSharesSold;
+
+        if (sharesAvailable > 0 && newOrder.remainingQuantity > 0) {
+          console.log(`📊 IPO_ACTIVE word: ${sharesAvailable} system shares available`);
+
+          // Use current IPO price for the trade
+          const ipoPrice = parseFloat(word.ipoCurrentPrice);
+          const orderPrice = parseFloat(newOrder.limitPrice || '999999');
+
+          // For market orders or limit orders at or above IPO price, fulfill from system
+          if (newOrder.orderType === 'MARKET' || orderPrice >= ipoPrice) {
+            const quantityToFulfill = Math.min(newOrder.remainingQuantity, sharesAvailable);
+
+            console.log(`🏦 Fulfilling ${quantityToFulfill} shares from system pool at ${ipoPrice} WB`);
+            await executeIpoTrade(newOrder, quantityToFulfill, ipoPrice);
+
+            // Reload the order to check if it's been fully filled
+            const updatedOrder = await storage.getOrder(newOrderId);
+            if (!updatedOrder || updatedOrder.remainingQuantity <= 0) {
+              console.log('✅ Order fully filled from system pool');
+              return;
+            }
+            // Update our local copy
+            Object.assign(newOrder, updatedOrder);
+          }
+        }
+      }
+    }
+
+    // Continue with normal P2P order matching if order not fully filled
     const oppositeSide = newOrder.side === 'BUY' ? 'SELL' : 'BUY';
     const oppositeOrders = await storage.getOpenOrders(wordId, oppositeSide);
 

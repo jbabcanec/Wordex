@@ -217,12 +217,21 @@ export function WordCard({ word, userBalance, userShares, compact = false }: Wor
         </div>
 
         {isIpoActive && (
-          <IpoBuyModal
-            open={ipoBuyModalOpen}
-            onOpenChange={setIpoBuyModalOpen}
-            word={word}
-            userBalance={userBalance}
-          />
+          <>
+            <IpoBuyModal
+              open={ipoBuyModalOpen}
+              onOpenChange={setIpoBuyModalOpen}
+              word={word}
+              userBalance={userBalance}
+            />
+            <TradeModal
+              open={tradeModalOpen}
+              onOpenChange={setTradeModalOpen}
+              word={word}
+              userBalance={userBalance}
+              userShares={userShares}
+            />
+          </>
         )}
 
         {isTrading && (
@@ -326,13 +335,22 @@ export function WordCard({ word, userBalance, userShares, compact = false }: Wor
               </div>
 
               {isIpoActive && (
-                <Button 
-                  className="bg-blue-600 hover:bg-blue-700"
-                  onClick={(e) => { e.stopPropagation(); setIpoBuyModalOpen(true); }} 
-                  data-testid={`button-buy-ipo-${word.textNormalized}`}
-                >
-                  Buy IPO Shares
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    className="bg-blue-600 hover:bg-blue-700"
+                    onClick={(e) => { e.stopPropagation(); setIpoBuyModalOpen(true); }}
+                    data-testid={`button-buy-ipo-${word.textNormalized}`}
+                  >
+                    Buy IPO Shares
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={(e) => { e.stopPropagation(); setTradeModalOpen(true); }}
+                    data-testid={`button-trade-ipo-${word.textNormalized}`}
+                  >
+                    Trade
+                  </Button>
+                </div>
               )}
               {isTrading && (
                 <Button 
@@ -353,12 +371,21 @@ export function WordCard({ word, userBalance, userShares, compact = false }: Wor
       </Card>
 
       {isIpoActive && (
-        <IpoBuyModal
-          open={ipoBuyModalOpen}
-          onOpenChange={setIpoBuyModalOpen}
-          word={word}
-          userBalance={userBalance}
-        />
+        <>
+          <IpoBuyModal
+            open={ipoBuyModalOpen}
+            onOpenChange={setIpoBuyModalOpen}
+            word={word}
+            userBalance={userBalance}
+          />
+          <TradeModal
+            open={tradeModalOpen}
+            onOpenChange={setTradeModalOpen}
+            word={word}
+            userBalance={userBalance}
+            userShares={userShares}
+          />
+        </>
       )}
 
       {isTrading && (
