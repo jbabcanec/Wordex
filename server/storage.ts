@@ -360,11 +360,14 @@ export class DatabaseStorage implements IStorage {
     
     // Transform to frontend format
     return results.map(({ holding, word }) => {
-      const currentValue = holding.quantity * parseFloat(word.currentPrice || '0');
-      const costBasis = parseFloat(holding.averageCost);
-      const profitLoss = currentValue - costBasis;
-      const profitLossPercent = costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
-      
+      const avgCostPerShare = parseFloat(holding.averageCost || '0');
+      const currentPricePerShare = parseFloat(word.currentPrice || '0');
+
+      const currentValue = holding.quantity * currentPricePerShare;
+      const totalCostBasis = holding.quantity * avgCostPerShare;
+      const profitLoss = currentValue - totalCostBasis;
+      const profitLossPercent = totalCostBasis > 0 ? (profitLoss / totalCostBasis) * 100 : 0;
+
       return {
         word: {
           id: word.id,
@@ -372,7 +375,7 @@ export class DatabaseStorage implements IStorage {
           currentPrice: word.currentPrice,
         },
         quantity: holding.quantity,
-        costBasis: holding.averageCost,
+        costBasis: totalCostBasis.toFixed(2),
         currentValue,
         profitLoss,
         profitLossPercent,
