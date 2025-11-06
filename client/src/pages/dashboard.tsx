@@ -76,7 +76,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="flex items-center gap-1 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <Button
                 size="sm"
                 variant="ghost"
@@ -87,7 +87,7 @@ export default function Dashboard() {
                 <HelpCircle className="h-4 w-4 mr-2" />
                 Help
               </Button>
-              
+
               <Button
                 size="icon"
                 variant="ghost"
@@ -98,14 +98,14 @@ export default function Dashboard() {
                 <HelpCircle className="h-4 w-4" />
               </Button>
 
-              <Card className="border-2 border-primary/20 bg-primary/5 min-w-[140px]">
-                <CardContent className="p-2 sm:p-3 flex items-center gap-2 sm:gap-3">
-                  <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-                  <div>
-                    <div className="text-xs text-muted-foreground uppercase tracking-wide">
+              <Card className="border-2 border-primary/20 bg-primary/5">
+                <CardContent className="p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
+                  <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide">
                       Balance
                     </div>
-                    <div className="font-mono font-bold text-base whitespace-nowrap" data-testid="text-balance">
+                    <div className="font-mono font-bold text-sm sm:text-base whitespace-nowrap" data-testid="text-balance">
                       {formatWB(userBalance)} WB
                     </div>
                   </div>
@@ -128,6 +128,7 @@ export default function Dashboard() {
                   size="icon"
                   variant="ghost"
                   data-testid="button-profile"
+                  className="flex-shrink-0"
                 >
                   <User className="h-4 w-4" />
                 </Button>
@@ -138,6 +139,7 @@ export default function Dashboard() {
                 variant="outline"
                 onClick={() => window.location.href = "/api/logout"}
                 data-testid="button-logout"
+                className="flex-shrink-0 hidden sm:flex"
               >
                 <LogOut className="h-4 w-4" />
               </Button>

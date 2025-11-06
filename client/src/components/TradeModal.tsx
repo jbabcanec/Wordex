@@ -195,18 +195,18 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex flex-col sm:max-w-2xl max-h-[calc(100dvh-2rem)] p-0" data-testid="modal-trade">
-        <DialogHeader className="flex-shrink-0 px-6 pt-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <DialogTitle className="font-display text-2xl font-bold tracking-wide">
+        <DialogHeader className="flex-shrink-0 px-4 sm:px-6 pt-4 sm:pt-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="font-display text-xl sm:text-2xl font-bold tracking-wide truncate">
                 {word.textNormalized}
               </DialogTitle>
-              <DialogDescription className="text-sm mt-1">
-                {(word.outstandingShares || 0).toLocaleString()} / {word.totalShares.toLocaleString()} shares outstanding
+              <DialogDescription className="text-xs sm:text-sm mt-1">
+                {(word.outstandingShares || 0).toLocaleString()} / {word.totalShares.toLocaleString()} shares
               </DialogDescription>
             </div>
             {bestBid > 0 && bestAsk > 0 && (
-              <div className="text-right">
+              <div className="text-right flex-shrink-0 hidden sm:block">
                 <div className="text-xs text-muted-foreground">Spread</div>
                 <div className="font-mono font-semibold text-sm">
                   {formatWB(spread)} <span className="text-xs text-muted-foreground">({spreadPercent.toFixed(2)}%)</span>
@@ -216,7 +216,7 @@ export function TradeModal({ open, onOpenChange, word, userBalance, userShares }
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 pb-6">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-4 sm:pb-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
           {/* Order Book */}
           <div className="space-y-3">

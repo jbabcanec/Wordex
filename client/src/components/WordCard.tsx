@@ -335,9 +335,9 @@ export function WordCard({ word, userBalance, userShares, compact = false }: Wor
               </div>
 
               {isIpoActive && (
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                   <Button
-                    className="bg-blue-600 hover:bg-blue-700"
+                    className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
                     onClick={(e) => { e.stopPropagation(); setIpoBuyModalOpen(true); }}
                     data-testid={`button-buy-ipo-${word.textNormalized}`}
                   >
@@ -345,6 +345,7 @@ export function WordCard({ word, userBalance, userShares, compact = false }: Wor
                   </Button>
                   <Button
                     variant="outline"
+                    className="w-full sm:w-auto"
                     onClick={(e) => { e.stopPropagation(); setTradeModalOpen(true); }}
                     data-testid={`button-trade-ipo-${word.textNormalized}`}
                   >

@@ -123,13 +123,13 @@ export function IpoBuyModal({ open, onOpenChange, word, userBalance }: IpoBuyMod
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex flex-col sm:max-w-md max-h-[calc(100dvh-2rem)] p-0" data-testid="modal-ipo-buy">
-        <DialogHeader className="flex-shrink-0 px-6 pt-6">
+        <DialogHeader className="flex-shrink-0 px-4 sm:px-6 pt-4 sm:pt-6">
           <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 rounded-md bg-blue-500/10">
+            <div className="p-2 rounded-md bg-blue-500/10 flex-shrink-0">
               <Flame className="h-5 w-5 text-blue-500" />
             </div>
-            <div>
-              <DialogTitle className="font-display text-xl">
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="font-display text-lg sm:text-xl truncate">
                 IPO: {word.textNormalized}
               </DialogTitle>
               <DialogDescription className="text-xs">
@@ -139,7 +139,7 @@ export function IpoBuyModal({ open, onOpenChange, word, userBalance }: IpoBuyMod
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 pb-6">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-4 sm:pb-6">
           <div className="space-y-4 mt-4">
           {/* IPO Info */}
           <div className="grid grid-cols-2 gap-3 p-4 rounded-md bg-blue-500/5 border border-blue-500/20">
